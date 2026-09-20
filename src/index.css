@@ -1394,3 +1394,142 @@ textarea.input {
     min-width: 0;
   }
 }
+
+/* ---------- Links in bodies ---------- */
+
+.body-link {
+  color: var(--forum);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  /* A pasted URL can be longer than the column; break it rather than let
+     it widen the card and force the page to scroll sideways. */
+  overflow-wrap: anywhere;
+}
+
+.body-link:hover {
+  color: var(--forum-deep);
+  background: var(--forum-soft);
+  border-radius: 2px;
+}
+
+.link-previews {
+  display: flex;
+  flex-wrap: wrap;
+  /* Without this the pill-shaped chips stretch to the height of the
+     tallest thumbnail beside them, and a 999px radius turns a stretched
+     chip into a large ellipse. */
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* A link with no derivable thumbnail: domain and an out-arrow, rather
+   than an empty box pretending to be a preview. */
+.link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card-soft);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  max-width: 100%;
+  overflow: hidden;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.link-chip:hover {
+  border-color: var(--forum);
+  color: var(--forum);
+}
+
+.link-chip-domain {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-chip-go {
+  flex: none;
+  opacity: 0.6;
+}
+
+.link-thumb {
+  position: relative;
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--card-soft);
+  text-decoration: none;
+  line-height: 0;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.link-thumb:hover {
+  border-color: var(--forum);
+  box-shadow: 0 2px 10px rgba(46, 94, 126, 0.14);
+}
+
+.link-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.link-thumb.is-md {
+  width: 260px;
+  height: 150px;
+}
+
+.link-thumb.is-sm {
+  width: 190px;
+  height: 110px;
+}
+
+@media (max-width: 520px) {
+  .link-thumb.is-md,
+  .link-thumb.is-sm {
+    width: 100%;
+    height: 180px;
+  }
+}
+
+/* Domain over the bottom of the thumbnail, so you can see where a link
+   goes before clicking it. */
+.link-thumb-domain {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 5px 9px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.link-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.62);
+  color: #FFFFFF;
+  font-size: 15px;
+  line-height: 44px;
+  text-align: center;
+  padding-left: 3px;
+}

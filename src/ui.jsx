@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { ACTIONS, MAX_BODY, personColor } from './theme.js';
 import { relativeTime, absoluteTime } from './lib/time.js';
+import { parseBody, previewsFor } from './lib/links.js';
 
 export function Card({ className = '', children, ...rest }) {
   return (
@@ -159,11 +160,86 @@ export function Composer({
   );
 }
 
-// Post/comment bodies are plain text, never HTML -- they're rendered
-// through React's normal escaping with whitespace preserved by CSS, so
-// there is no injection surface and no markdown surprises.
+// Post/comment bodies are plain text, never HTML. URLs in them become
+// links, but by building React elements from parsed segments -- nothing is
+// ever passed to innerHTML, and only http/https survives safeUrl, so a
+// body containing "javascript:..." stays words on a page.
 export function Body({ children }) {
-  return <p className="body-text">{children}</p>;
+  const text = typeof children === 'string' ? children : '';
+  const parts = useMemo(() => parseBody(text), [text]);
+
+  return (
+    <p className="body-text">
+      {parts.map((part, i) =>
+        part.type === 'link' ? (
+          <a
+            key={i}
+            className="body-link"
+            href={part.url}
+            target="_blank"
+            // noopener stops the opened page reaching back through
+            // window.opener; noreferrer keeps the forum's URL out of the
+            // other site's logs.
+            rel="noopener noreferrer"
+          >
+            {part.text}
+          </a>
+        ) : (
+          <span key={i}>{part.text}</span>
+        ),
+      )}
+    </p>
+  );
+}
+
+// One preview. Falls back to a plain domain chip when there is no
+// thumbnail to show, or when the one we guessed at doesn't load -- a URL
+// ending in .jpg isn't a promise that an image is actually there.
+function Thumb({ preview, size }) {
+  const [failed, setFailed] = useState(false);
+  const showImage = preview.thumbnail && !failed;
+
+  if (!showImage) {
+    return (
+      <a className="link-chip" href={preview.url} target="_blank" rel="noopener noreferrer">
+        <span className="link-chip-domain">{preview.domain}</span>
+        <span className="link-chip-go" aria-hidden="true">↗</span>
+      </a>
+    );
+  }
+
+  return (
+    <a className={`link-thumb is-${size} is-${preview.kind}`} href={preview.url} target="_blank" rel="noopener noreferrer">
+      <img
+        src={preview.thumbnail}
+        alt=""
+        loading="lazy"
+        // The thumbnail is fetched straight from whoever hosts it, so the
+        // request reveals the reader's IP to that host either way; at
+        // least don't also hand over which page they're reading.
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+      />
+      {preview.kind === 'video' ? <span className="link-play" aria-hidden="true">▶</span> : null}
+      <span className="link-thumb-domain">{preview.domain}</span>
+    </a>
+  );
+}
+
+// The strip of previews under a body. Thumbnails are only possible where
+// one can be derived without a server: a direct image URL, or a YouTube id.
+// Reading Open Graph tags off an arbitrary page needs a backend this app
+// doesn't have, so everything else gets a domain chip rather than a guess.
+export function LinkPreviews({ text, size = 'md' }) {
+  const previews = useMemo(() => previewsFor(text), [text]);
+  if (previews.length === 0) return null;
+  return (
+    <div className={`link-previews is-${size}`}>
+      {previews.map((preview) => (
+        <Thumb key={preview.url} preview={preview} size={size} />
+      ))}
+    </div>
+  );
 }
 
 export function Count({ value, label }) {
