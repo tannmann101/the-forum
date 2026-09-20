@@ -256,6 +256,30 @@ await expect('a delete action can be logged', setDoc(doc(tannerDb, 'activityLog/
 await expect('an edit action can be logged', setDoc(doc(tannerDb, 'activityLog/edit1'), validActivity({ action: 'post.edit', targetType: 'post', targetId: 'ownPost' })), true);
 await expect('a log entry still cannot be deleted', deleteDoc(doc(tannerDb, 'activityLog/del1')), false);
 
+// ---------- Attachments ----------
+// Only metadata reaches Firestore; storage.rules governs the bytes. The
+// rules check it as a capped list rather than field-by-field, because
+// rules cannot iterate a list.
+const attachment = (o = {}) => ({
+  url: 'https://example.com/a.png', path: 'attachments/uid/a.png', name: 'a.png',
+  width: 800, height: 600, size: 1234, contentType: 'image/png', ...o,
+});
+
+await expect('a post can carry attachments',
+  setDoc(doc(tannerDb, 'posts/att1'), validPost({ attachments: [attachment()] })), true);
+await expect('a comment can carry attachments',
+  setDoc(doc(rochelleDb, 'comments/att2'), validComment({ attachments: [attachment()] })), true);
+await expect('a reply can carry attachments',
+  setDoc(doc(tannerDb, 'replies/att3'), validReply({ attachments: [attachment()] })), true);
+await expect('no attachments at all is still fine',
+  setDoc(doc(tannerDb, 'posts/att4'), validPost()), true);
+await expect('four attachments is the cap',
+  setDoc(doc(tannerDb, 'posts/att5'), validPost({ attachments: [1, 2, 3, 4].map(() => attachment()) })), true);
+await expect('five attachments is rejected',
+  setDoc(doc(tannerDb, 'posts/att6'), validPost({ attachments: [1, 2, 3, 4, 5].map(() => attachment()) })), false);
+await expect('a non-list attachments field is rejected',
+  setDoc(doc(tannerDb, 'posts/att7'), validPost({ attachments: 'not-a-list' })), false);
+
 // ---------- The batch the app actually writes ----------
 // A post, its activity-log entry, and the thread's lastActivityAt bump all
 // commit together -- this is the exact shape useForum.js sends, so if the

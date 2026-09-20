@@ -1,0 +1,40 @@
+rules_version = '2';
+
+// Attachments live in Cloud Storage; only their metadata (a URL, a size, a
+// couple of dimensions) goes into the Firestore document. That split is
+// deliberate: useForum keeps whole collections in memory via onSnapshot, so
+// image bytes in those documents would mean every client downloading every
+// photo ever posted on every load.
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Same family allow-list as firestore.rules. Adding someone means
+    // adding their address in both places and redeploying both.
+    function isAllowed() {
+      return request.auth != null &&
+        request.auth.token.email in [
+          'tannerwesgardner@gmail.com',
+          'rochelleygardner@gmail.com'
+        ];
+    }
+
+    // Everything is written under the uploader's own uid, so ownership is
+    // the path rather than a field that could be spoofed.
+    match /attachments/{userId}/{fileName} {
+      allow read: if isAllowed();
+
+      allow write: if isAllowed()
+        && userId == request.auth.uid
+        // Images only. Without this the bucket is a general file host, and
+        // an .html uploaded here would be served from the app's own
+        // storage domain.
+        && request.resource.contentType.matches('image/(jpeg|png|gif|webp|avif|heic|heif)')
+        // 10 MB. The client downscales before uploading, so anything near
+        // this is either an unusual original or a bug.
+        && request.resource.size < 10 * 1024 * 1024;
+
+      // Only the uploader can remove their own file -- used to clean up
+      // when an upload is cancelled before the post is submitted.
+      allow delete: if isAllowed() && userId == request.auth.uid;
+    }
+  }
+}

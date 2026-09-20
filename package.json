@@ -8,13 +8,15 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "emulators": "firebase emulators:start --only auth,firestore --project demo-the-forum",
+    "emulators": "firebase emulators:start --only auth,firestore,storage --project demo-the-forum",
     "icons": "node scripts/make-icons.mjs",
     "test:rules": "node scripts/test-rules.mjs",
     "test:activity": "node --test scripts/test-activity.mjs",
     "test:search": "node --test scripts/test-search.mjs",
     "test:links": "node --test scripts/test-links.mjs",
-    "test": "npm run test:activity && npm run test:search && npm run test:links && npm run test:rules"
+    "test:images": "node --test scripts/test-images.mjs",
+    "test:storage": "node scripts/test-storage-rules.mjs",
+    "test": "npm run test:activity && npm run test:search && npm run test:links && npm run test:images && npm run test:rules && npm run test:storage"
   },
   "dependencies": {
     "firebase": "^12.15.0",

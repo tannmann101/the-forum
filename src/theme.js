@@ -81,3 +81,8 @@ export const MAX_CATEGORY_NAME = 60;
 // Body of a comment that was deleted while replies still hung off it. The
 // document stays so its replies keep their context, but the text is gone.
 export const TOMBSTONE_BODY = '[deleted]';
+
+// A post that is nothing but an image still needs a body, because
+// firestore.rules requires a non-empty one and that check is worth keeping
+// for everything else. The renderer hides this rather than printing it.
+export const IMAGE_ONLY_BODY = '[image]';
