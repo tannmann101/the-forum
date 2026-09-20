@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArchivedNote, Body, Byline, Card, Composer, EmptyState, ItemActions, Tombstone } from '../ui.jsx';
 
 const byTime = (a, b) => a.createdAt - b.createdAt;
@@ -10,7 +10,7 @@ function Reply({ reply, roster, me, editing, onStartEdit, onStopEdit, onEdit, on
   const mine = reply.authorId === me;
 
   return (
-    <li className="reply">
+    <li className="reply" id={`item-${reply.id}`}>
       <Byline
         name={reply.authorName}
         personId={reply.authorId}
@@ -61,7 +61,7 @@ function Comment({ comment, replies, roster, me, editingId, onStartEdit, onStopE
   const deleted = Boolean(comment.deleted);
 
   return (
-    <li className="comment">
+    <li className="comment" id={`item-${comment.id}`}>
       <Byline
         name={comment.authorName}
         personId={comment.authorId}
@@ -147,7 +147,10 @@ function Post({ post, comments, replies, roster, me, editingId, onStartEdit, onS
   const archived = Boolean(post.archived);
 
   return (
-    <Card className={`post ${post.isInitial ? 'is-initial' : ''} ${archived ? 'is-archived' : ''}`}>
+    <Card
+      id={`item-${post.id}`}
+      className={`post ${post.isInitial ? 'is-initial' : ''} ${archived ? 'is-archived' : ''}`}
+    >
       <Byline
         name={post.authorName}
         personId={post.authorId}
@@ -228,9 +231,28 @@ function Post({ post, comments, replies, roster, me, editingId, onStartEdit, onS
 // Opening post at the top, then follow-up posts in the order they were
 // written. Follow-up posts are untitled by design -- the thread has the
 // title, and the posts under it are just the conversation continuing.
-export default function ThreadView({ thread, category, posts, comments, replies, roster, me, onBack, handlers }) {
+export default function ThreadView({ thread, category, posts, comments, replies, roster, me, focusId, onBack, handlers }) {
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState(null);
+
+  // Arriving from a search result: scroll the matched post/comment/reply
+  // into view and flash it, so you land on the thing you searched for
+  // rather than at the top of a long thread hunting for it. Waits a frame
+  // because the element only exists once this render has painted.
+  useEffect(() => {
+    if (!focusId) return undefined;
+    const raf = requestAnimationFrame(() => {
+      const el = document.getElementById(`item-${focusId}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('is-found');
+      // Remove the class rather than leaving it -- it's a "here it is"
+      // flash, not a persistent selection.
+      window.setTimeout(() => el.classList.remove('is-found'), 2600);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [focusId, thread.id]);
+
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(thread.title);
 

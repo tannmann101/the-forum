@@ -7,6 +7,7 @@ import Sidebar from './Sidebar.jsx';
 import ThreadList from './components/ThreadList.jsx';
 import ThreadView from './components/ThreadView.jsx';
 import ActivityLog from './pages/ActivityLog.jsx';
+import SearchBar from './SearchBar.jsx';
 import { peopleIn } from './lib/activity.js';
 
 const PAGES = [
@@ -19,13 +20,22 @@ const HOME_SITE = 'https://thegardners.xyz';
 
 const parseHash = () => {
   const raw = window.location.hash.replace(/^#\/?/, '');
-  if (raw === 'activity') return { page: 'activity', threadId: null };
-  if (raw.startsWith('t/')) return { page: 'discussions', threadId: raw.slice(2) };
-  return { page: 'discussions', threadId: null };
+  if (raw === 'activity') return { page: 'activity', threadId: null, focusId: null };
+  if (raw.startsWith('t/')) {
+    // #/t/<threadId> or #/t/<threadId>/<focusId> -- the focus id is how a
+    // search result opens a thread scrolled to the exact post, comment or
+    // reply that matched, and it survives a reload or a shared link.
+    const [threadId, focusId] = raw.slice(2).split('/');
+    return { page: 'discussions', threadId: threadId || null, focusId: focusId || null };
+  }
+  return { page: 'discussions', threadId: null, focusId: null };
 };
 
-const hashFor = ({ page, threadId }) =>
-  page === 'activity' ? '#/activity' : threadId ? `#/t/${threadId}` : '#/';
+const hashFor = ({ page, threadId, focusId }) => {
+  if (page === 'activity') return '#/activity';
+  if (!threadId) return '#/';
+  return focusId ? `#/t/${threadId}/${focusId}` : `#/t/${threadId}`;
+};
 
 // Navigation lives in real browser history, not in React state. That's what
 // makes the platform's own back gesture work -- the iOS/Android edge swipe,
@@ -63,7 +73,7 @@ function useRoute() {
   // activity log); replace swaps the current one (switching category), so
   // back doesn't have to walk through every sideways move.
   const navigate = (next, { replace = false } = {}) => {
-    const resolved = { page: 'discussions', threadId: null, ...next };
+    const resolved = { page: 'discussions', threadId: null, focusId: null, ...next };
     const method = replace ? 'replaceState' : 'pushState';
     window.history[method]({ forum: 'app' }, '', hashFor(resolved));
     setRoute(resolved);
@@ -100,7 +110,7 @@ function Shell({ user }) {
   } = forum;
 
   const [route, navigate] = useRoute();
-  const { page, threadId: openThreadId } = route;
+  const { page, threadId: openThreadId, focusId } = route;
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
 
   const sortedCategories = useMemo(
@@ -146,6 +156,13 @@ function Shell({ user }) {
     navigate({ page: 'discussions', threadId: null }, { replace: true });
   };
 
+  // A search hit knows which thread to open and which element to focus once
+  // it's open; a category hit has neither, and just switches the sidebar.
+  const openSearchResult = (hit) => {
+    if (hit.categoryId) setSelectedCategoryId(hit.categoryId);
+    navigate({ page: 'discussions', threadId: hit.threadId, focusId: hit.focusId });
+  };
+
   return (
     <div className="app-shell">
       <nav className="nav">
@@ -162,12 +179,24 @@ function Shell({ user }) {
             </button>
           ))}
         </div>
+        <SearchBar
+          data={{ categories, threads, posts, comments, replies }}
+          onSelect={openSearchResult}
+        />
+
         <div className="nav-account">
           <span className="nav-email">{user.email}</span>
           <button type="button" className="link-btn" onClick={() => signOut(auth)}>
             Sign out
           </button>
         </div>
+
+        {/* A real link, not a history trick: this leaves for the family
+            site directly, wherever you are in the app. The back gesture
+            still walks out level by level. */}
+        <a className="home-btn" href={HOME_SITE} title="Back to thegardners.xyz">
+          <span aria-hidden="true">←</span> Gardners
+        </a>
       </nav>
 
       {status === 'loading' ? (
@@ -206,6 +235,7 @@ function Shell({ user }) {
                 replies={replies}
                 roster={roster}
                 me={user.uid}
+                focusId={focusId}
                 onBack={() => window.history.back()}
                 handlers={{
                   onAddPost: (body) =>

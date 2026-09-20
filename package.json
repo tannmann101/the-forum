@@ -12,7 +12,8 @@
     "icons": "node scripts/make-icons.mjs",
     "test:rules": "node scripts/test-rules.mjs",
     "test:activity": "node --test scripts/test-activity.mjs",
-    "test": "npm run test:activity && npm run test:rules"
+    "test:search": "node --test scripts/test-search.mjs",
+    "test": "npm run test:activity && npm run test:search && npm run test:rules"
   },
   "dependencies": {
     "firebase": "^12.15.0",
