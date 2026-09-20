@@ -584,6 +584,7 @@ textarea.input {
 }
 
 .thread-row {
+  position: relative;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 
@@ -592,6 +593,13 @@ textarea.input {
   box-shadow: 0 2px 10px rgba(46, 94, 126, 0.1);
 }
 
+/* The whole row opens the thread, not just the title. The title stays a
+   real <button> -- so it keeps its semantics, its place in the tab order and
+   its screen-reader label -- and only the hit area grows, via an overlay
+   stretched to the card's edges. Nothing else in the row is interactive, so
+   the overlay has nothing to swallow. Making the card itself a
+   div[role=button] would have meant re-implementing focus and Enter/Space by
+   hand for no gain. */
 .thread-open {
   appearance: none;
   background: none;
@@ -600,6 +608,25 @@ textarea.input {
   cursor: pointer;
   text-align: left;
   width: 100%;
+}
+
+.thread-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+}
+
+/* Focus moves to the card now that the card is the target -- the ring has to
+   follow, or keyboard users get a ring around the title alone while the
+   click target is the whole row. */
+.thread-row:focus-within {
+  border-color: var(--forum);
+  box-shadow: 0 0 0 3px var(--forum-soft);
+}
+
+.thread-open:focus-visible {
+  outline: none;
 }
 
 .thread-open h3 {
