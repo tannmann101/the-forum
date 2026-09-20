@@ -37,7 +37,7 @@ const liveConfig = {
 // Google's own button with it. It is NOT part of the firebaseConfig snippet
 // the console hands you when you register a web app -- it lives on a
 // different page, and is the one value that has to be copied separately.
-export const GOOGLE_CLIENT_ID = `${PLACEHOLDER}OAUTH_CLIENT_ID`;
+export const GOOGLE_CLIENT_ID = '677107463937-9uhi1b4blkag1o6a5csveljms909sben.apps.googleusercontent.com';
 
 const isPlaceholder = (value) => typeof value === 'string' && value.startsWith(PLACEHOLDER);
 
