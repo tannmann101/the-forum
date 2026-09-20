@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArchivedNote, Body, Byline, Card, Composer, EmptyState, ItemActions, Tombstone } from '../ui.jsx';
+import { ArchivedNote, Body, Byline, Card, Composer, EmptyState, ItemActions, LinkPreviews, Tombstone } from '../ui.jsx';
 
 const byTime = (a, b) => a.createdAt - b.createdAt;
 
@@ -32,6 +32,7 @@ function Reply({ reply, roster, me, editing, onStartEdit, onStopEdit, onEdit, on
       ) : (
         <>
           <Body>{reply.body}</Body>
+          <LinkPreviews text={reply.body} size="sm" />
           {mine ? (
             <ItemActions
               actions={[
@@ -86,6 +87,7 @@ function Comment({ comment, replies, roster, me, editingId, onStartEdit, onStopE
       ) : (
         <>
           <Body>{comment.body}</Body>
+          <LinkPreviews text={comment.body} size="sm" />
           {isMine ? (
             <ItemActions
               actions={[
@@ -180,6 +182,7 @@ function Post({ post, comments, replies, roster, me, editingId, onStartEdit, onS
       ) : (
         <>
           <Body>{post.body}</Body>
+          <LinkPreviews text={post.body} size="md" />
           {isMine ? (
             <ItemActions
               actions={[

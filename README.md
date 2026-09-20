@@ -114,6 +114,42 @@ actions, and `npm run test:activity` pins the list in `theme.js` against
 Out of scope, deliberately: reactions, notifications, and reply-to-reply
 nesting.
 
+## Links in posts
+
+URLs typed into a post, comment or reply become clickable, and get a
+preview strip underneath where one can be derived.
+
+Bodies stay **plain text** in Firestore — nothing about links is stored.
+The rendering parses the text into plain and link segments and builds React
+elements from them, so no markup is ever produced and there is no
+innerHTML anywhere. Only `http` and `https` survive `safeUrl()`, so a body
+containing `javascript:alert(1)` stays words on a page rather than becoming
+a live href. Links open in a new tab with `rel="noopener noreferrer"`.
+
+Because this is derived at render time rather than stored, every post
+already written picks it up with no migration.
+
+**Thumbnails, where possible:**
+
+| Link | Shown |
+|---|---|
+| Direct image URL (`.jpg`, `.png`, `.gif`, `.webp`, `.avif`, `.bmp`, `.svg`) | the image itself |
+| YouTube (`watch`, `youtu.be`, `shorts`, `embed`) | video thumbnail, derived from the id, with a play badge |
+| Anything else | a chip showing the domain |
+
+"Where possible" is a real limit rather than a hedge. A thumbnail for an
+arbitrary page means reading its Open Graph tags, which needs a server to
+fetch and parse the page — this app is static files plus Firestore, with no
+Cloud Functions. Adding one would mean the Blaze plan and a new deploy
+target, so generic links get an honest domain chip instead of a guess.
+
+A URL ending in `.jpg` isn't a promise that an image is there, so a
+thumbnail that fails to load falls back to the same domain chip rather than
+leaving a broken image. Thumbnails are `loading="lazy"` and
+`referrerPolicy="no-referrer"` — the request reveals the reader's IP to
+whoever hosts the image either way, but it doesn't also hand over which
+page they're reading.
+
 ## Search
 
 A search box in the nav matches free text across **everything** -- category
