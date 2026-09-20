@@ -1175,3 +1175,222 @@ textarea.input {
 .empty-state + .archived-block {
   margin-top: 22px;
 }
+
+/* ---------- Back to the family site ---------- */
+
+/* A real link rather than a history trick: it leaves for thegardners.xyz
+   from wherever you are, while the back gesture still walks out level by
+   level. */
+.home-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color var(--transition), color var(--transition), background var(--transition);
+}
+
+.home-btn:hover {
+  border-color: var(--forum);
+  color: var(--forum);
+  background: var(--forum-soft);
+}
+
+/* ---------- Search ---------- */
+
+.search {
+  position: relative;
+  flex: 1 1 200px;
+  min-width: 150px;
+  max-width: 360px;
+}
+
+.search-input {
+  font-size: 13.5px;
+  padding: 8px 12px;
+}
+
+/* The panel floats over the page rather than pushing it down, so results
+   never shove the thread you're reading around while you type. */
+.search-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 10px rgba(36, 42, 48, 0.08), 0 18px 40px rgba(36, 42, 48, 0.14);
+  padding: 8px;
+  min-width: 320px;
+}
+
+.search-empty,
+.search-count {
+  margin: 4px 8px 8px;
+  font-size: 12px;
+  color: var(--mute);
+}
+
+.search-group + .search-group {
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+
+.search-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.search-group-count {
+  font-weight: 700;
+  background: var(--card-soft);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+}
+
+.search-result {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 9px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+}
+
+/* One highlight, driven by the keyboard cursor -- hover sets the cursor
+   too, so the mouse and arrow keys can't disagree about what Enter does. */
+.search-result.is-cursor {
+  background: var(--forum-soft);
+}
+
+.result-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.result-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-type {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.result-snippet {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.result-snippet mark {
+  background: #FBE7B8;
+  color: var(--ink);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.result-where {
+  font-size: 11px;
+  color: var(--mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-more {
+  margin: 2px 9px 4px;
+  font-size: 11px;
+  color: var(--mute);
+}
+
+/* The flash on whatever a search result landed you on. A brief "here it
+   is", not a persistent selection -- the class is removed after it runs. */
+@keyframes found-flash {
+  0% { box-shadow: 0 0 0 3px var(--forum); background: var(--forum-soft); }
+  100% { box-shadow: 0 0 0 3px transparent; background: transparent; }
+}
+
+.is-found {
+  animation: found-flash 2.4s ease-out;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-found {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--forum);
+  }
+}
+
+/* On a phone the nav stacks, so "top right" has to be pinned rather than
+   left to flex order. */
+@media (max-width: 860px) {
+  .nav {
+    position: relative;
+  }
+
+  .home-btn {
+    position: absolute;
+    top: 11px;
+    right: 14px;
+  }
+
+  /* Only the brand row sits under the pinned button, so only it reserves
+     the space. Padding the whole nav would squeeze the search box and its
+     results panel into two-thirds of a phone screen for no reason. */
+  .nav-brand {
+    padding-right: 110px;
+  }
+
+  /* The nav is a column here, so flex-grow would stretch the search box
+     vertically and leave its results panel floating well below the input.
+     Fixed height, full width. */
+  .search {
+    flex: none;
+    max-width: none;
+    width: 100%;
+  }
+
+  .search-panel {
+    min-width: 0;
+  }
+}

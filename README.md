@@ -114,6 +114,28 @@ actions, and `npm run test:activity` pins the list in `theme.js` against
 Out of scope, deliberately: reactions, notifications, and reply-to-reply
 nesting.
 
+## Search
+
+A search box in the nav matches free text across **everything** -- category
+names, thread titles, and post, comment and reply bodies -- and groups the
+hits by what kind of thing they are. Selecting one opens the thread scrolled
+to the exact post, comment or reply that matched, and flashes it.
+
+It runs entirely in the browser against the snapshots `useForum` already
+holds. Firestore has no substring or full-text query, so a server-side
+version would mean standing up a second index (Algolia and friends) for a
+corpus that fits in memory many times over. The matching logic lives in
+`src/lib/search.js` with no Firestore or DOM reference, so
+`npm run test:search` exercises it directly.
+
+Matching is case-insensitive and partial-word (`fenc` finds `fence`), and
+every whitespace-separated token has to appear somewhere -- so `fence quote`
+finds a line containing both, in either order. Each group is capped at 8
+results and says how many more there are rather than silently truncating.
+
+The focused item is addressable: `#/t/<threadId>/<itemId>`. That survives a
+reload and can be sent to someone else.
+
 ## Navigation and the back gesture
 
 Navigation lives in real browser history rather than React state. Opening a
@@ -124,6 +146,10 @@ That means the platform's own back gesture just works — the iOS/Android
 edge swipe, the Android hardware back button and the browser back button
 all pop history, so one mechanism covers all of them and there's no custom
 touch handling to fight with the OS.
+
+There's also a **← Gardners** button in the top right that leaves for the
+family site directly, from anywhere in the app -- a plain link, not a
+history trick, for when you don't want to walk back out level by level.
 
 On mount the app replaces the current history entry with an `exit` marker
 and pushes its first screen on top. That guarantees exactly one entry below
