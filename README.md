@@ -102,25 +102,57 @@ both of those correlate the attempt with the page through session storage,
 which breaks once an installed iOS Home Screen app leaves its browsing context
 for accounts.google.com and comes back.
 
-## One-time cloud setup
+## The Firebase project
 
-The Forum needs its **own** Firebase project. Don't point it at the ledger's or
-the workshop's -- deploying `firestore.rules` would overwrite theirs.
+The Forum runs on its own Firebase project, **`the-forum-d9cb4`**, rather than
+sharing the ledger's or the workshop's. That's not fussiness:
+`firebase deploy --only firestore:rules` replaces a project's *entire*
+ruleset, so deploying from here into a sibling's project would delete that
+app's rules and break it.
 
-1. Firebase Console → **Add project** (e.g. `the-forum`). Analytics optional.
+**The project is owned by a secondary Google account**, because the primary
+account had hit Firebase's per-account project limit. That affects exactly one
+thing -- which account you sign into the *console* with. It has no bearing on
+who can use the app: the allow-list in `firestore.rules` matches the
+**signed-in user's** email (`request.auth.token.email`), not the project
+owner, so both family accounts work normally.
+
+To avoid switching Google accounts every time you need the console, the
+primary account is added to the project as an **Owner** under
+*Project settings → Users and permissions*. `firebase deploy` then works while
+logged in as the primary. The project still counts against the secondary
+account's quota, which is the point.
+
+One consequence worth knowing: if that secondary account ever lapses, the
+project goes with it. The IAM Owner grant on the primary account is the thing
+protecting you there -- don't remove it.
+
+### Setting one up from scratch
+
+1. Firebase Console → **Add project**. Analytics optional. (Out of project
+   quota? Either add Firebase to an existing Google Cloud project, request a
+   limit increase, or create it under another Google account and grant your
+   main account Owner as above.)
 2. **Build → Firestore Database → Create database** (production mode, any region).
 3. **Project settings → Your apps → Web (`</>`)** → register an app. Copy the
    `firebaseConfig` values into `liveConfig` in `src/firebase.js`.
 4. **Authentication → Sign-in method → Google** → enable it. Expand
    **Web SDK configuration** and copy the **Web client ID** into
-   `GOOGLE_CLIENT_ID` in `src/firebase.js`.
+   `GOOGLE_CLIENT_ID` in `src/firebase.js`. This is *not* part of the
+   `firebaseConfig` snippet from step 3 -- it lives on a different page and is
+   the one value you have to go find separately.
 5. **Authentication → Settings → Authorized domains** → add
    `forum.thegardners.xyz` (and `localhost` if you want to sign in for real
    locally).
-6. Deploy the rules: `npx firebase deploy --only firestore:rules --project <your-project-id>`.
+6. Deploy the rules: `npx firebase deploy --only firestore:rules --project the-forum-d9cb4`.
 
-Until step 3 is done the app shows a short setup screen instead of an opaque
-Firebase stack trace.
+Step 6 is easy to skip and confusing to debug: without it the project keeps
+Firestore's default rules, every read is denied, and the app looks broken
+rather than unconfigured.
+
+Steps 3 and 4 are checked separately at startup, so a build with the
+`firebaseConfig` filled in but no client id says so explicitly instead of
+rendering a Google button that fails on an unknown client id.
 
 ## Running locally
 

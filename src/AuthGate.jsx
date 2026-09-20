@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, signInWithCredential, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { auth, isConfigured, useEmulator, GOOGLE_CLIENT_ID } from './firebase.js';
+import { auth, isConfigured, setupNeeded, useEmulator, GOOGLE_CLIENT_ID } from './firebase.js';
 import { loadGoogleIdentityServices } from './lib/googleIdentity.js';
 
 export function useAuthUser() {
@@ -102,16 +102,26 @@ export default function AuthGate({ user, forbidden, children }) {
   }, [user]);
 
   // A half-filled src/firebase.js would otherwise fail deep inside the SDK
-  // with an opaque auth/invalid-api-key. Say what's actually missing instead.
+  // with an opaque auth/invalid-api-key, or -- worse, because it looks like
+  // it should work -- render a Google button that dies on an unknown client
+  // id. Name the missing piece and where to find it instead.
   if (!isConfigured) {
     return (
       <Centered>
         <h1 className="auth-title">The Forum</h1>
-        <p className="auth-sub">
-          This build hasn't been pointed at a Firebase project yet. Fill in <code>src/firebase.js</code> with your
-          project's web config and OAuth client id -- the README's &ldquo;One-time cloud setup&rdquo; section walks
-          through it.
-        </p>
+        {setupNeeded === 'oauth-client-id' ? (
+          <p className="auth-sub">
+            Almost there -- the Firebase project is wired up, but sign-in still needs the Google OAuth web client id.
+            Copy it from Firebase Console &rarr; Authentication &rarr; Sign-in method &rarr; Google &rarr; Web SDK
+            configuration into <code>GOOGLE_CLIENT_ID</code> in <code>src/firebase.js</code>.
+          </p>
+        ) : (
+          <p className="auth-sub">
+            This build hasn't been pointed at a Firebase project yet. Fill in <code>src/firebase.js</code> with your
+            project's web config and OAuth client id -- the README's &ldquo;The Firebase project&rdquo; section walks
+            through it.
+          </p>
+        )}
       </Centered>
     );
   }
