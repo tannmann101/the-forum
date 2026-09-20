@@ -1,15 +1,17 @@
-import { useMemo, useState } from 'react';
-import { Byline, Card, Count, EmptyState } from '../ui.jsx';
+import { useMemo, useRef, useState } from 'react';
+import { AttachmentPicker, Byline, Card, Count, EmptyState } from '../ui.jsx';
 import { MAX_TITLE } from '../theme.js';
 
 // Starting a thread needs a title AND an opening post, so it gets its own
 // two-field form rather than the shared Composer.
-function NewThreadForm({ onCreate, disabled }) {
+function NewThreadForm({ onCreate, disabled, uid }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [attachments, setAttachments] = useState([]);
+  const picker = useRef(null);
 
   if (!open) {
     return (
@@ -21,13 +23,19 @@ function NewThreadForm({ onCreate, disabled }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!title.trim() || !body.trim() || busy) return;
+    if (!title.trim() || (!body.trim() && attachments.length === 0) || busy) return;
+    if (picker.current?.uploading) {
+      setError('Still uploading — one moment.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
-      await onCreate({ title, body });
+      await onCreate({ title, body, attachments: picker.current?.metadata() || [] });
+      picker.current?.clear(false);
       setTitle('');
       setBody('');
+      setAttachments([]);
       setOpen(false);
     } catch (err) {
       console.error('Failed to start thread', err);
@@ -58,12 +66,24 @@ function NewThreadForm({ onCreate, disabled }) {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit(e);
           }}
         />
+        <AttachmentPicker ref={picker} uid={uid} onChange={setAttachments} />
         {error ? <p className="composer-error">{error}</p> : null}
         <div className="composer-actions">
-          <button type="submit" className="btn-primary" disabled={busy || !title.trim() || !body.trim()}>
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={busy || !title.trim() || (!body.trim() && attachments.length === 0)}
+          >
             {busy ? 'Starting…' : 'Start thread'}
           </button>
-          <button type="button" className="link-btn" onClick={() => setOpen(false)}>
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              picker.current?.clear();
+              setOpen(false);
+            }}
+          >
             Cancel
           </button>
           <span className="composer-hint">⌘/Ctrl + Enter</span>
@@ -102,7 +122,7 @@ function ThreadRow({ thread, roster, onOpen, archived }) {
   );
 }
 
-export default function ThreadList({ category, threads, posts, comments, replies, roster, onOpenThread, onCreateThread }) {
+export default function ThreadList({ category, threads, posts, comments, replies, roster, me, onOpenThread, onCreateThread }) {
   const [showArchived, setShowArchived] = useState(false);
   const rows = useMemo(() => {
     const postCounts = new Map();
@@ -148,7 +168,7 @@ export default function ThreadList({ category, threads, posts, comments, replies
         </p>
       </div>
 
-      <NewThreadForm onCreate={onCreateThread} />
+      <NewThreadForm onCreate={onCreateThread} uid={me} />
 
       {live.length === 0 ? (
         <EmptyState>

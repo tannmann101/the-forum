@@ -114,6 +114,67 @@ actions, and `npm run test:activity` pins the list in `theme.js` against
 Out of scope, deliberately: reactions, notifications, and reply-to-reply
 nesting.
 
+## Attaching images
+
+Posts, comments and replies can carry up to four images each. Pick them
+with the **Add image** button, or paste a screenshot straight into the
+composer — the clipboard path is the shortest route from "look at this" to
+posted.
+
+The bytes go to **Cloud Storage**; only metadata (a URL, a path, a size, the
+dimensions) lands on the Firestore document. That split is deliberate rather
+than tidy-minded: `useForum` holds whole collections in memory through
+`onSnapshot`, so images inside those documents would mean every client
+downloading every photo ever posted, on every load. Metadata is a few
+hundred bytes per image, so the collections stay small.
+
+Uploads start the moment a file is picked, not on submit, so posting is
+instant once it's written. The cost of that is orphans — a file uploaded and
+then abandoned has no document pointing at it — so removing an image, or
+cancelling the composer, cancels the upload or deletes the object on the way
+out.
+
+**Before it leaves the device**, an image is resized to 2000px on its long
+edge and re-encoded as JPEG at quality 0.85 — a phone photo is 12MP and
+several megabytes, which nobody reading a family forum needs and which costs
+upload time on mobile data. Animated GIFs pass through untouched, since
+drawing one to a canvas would flatten it to a single frame, and the
+re-encode is discarded if it comes out larger than the original.
+
+### Rules
+
+`storage.rules` mirrors `firestore.rules`: the same two family addresses,
+and nothing else gets in.
+
+- everything is written under `attachments/<uid>/`, so **ownership is the
+  path** rather than a field that could be spoofed
+- **images only** (`jpeg png gif webp avif heic heif`). Without that check
+  the bucket is a general file host, and an `.html` uploaded to it would be
+  served from the app's own storage domain
+- **10 MB ceiling**, matching the client's — a unit test asserts the two
+  lists and the cap agree, because otherwise they drift and a file passes
+  the form only to be refused by the bucket
+- only the uploader may delete, which is what the abandoned-upload cleanup
+  relies on
+
+`npm run test:storage` drives these against the Storage emulator: 26 checks
+covering the allow-list, path scoping, every accepted and rejected content
+type, the size ceiling, and deletes.
+
+### One-time setup
+
+Cloud Storage has to be turned on for the project (**Build → Storage → Get
+started**), and on a project this new that requires the Blaze plan. The free
+allowance — 5GB stored, 1GB/day downloaded — means a two-person forum
+realistically costs nothing, but Blaze has no hard spending cap by default,
+so set a budget alert.
+
+Then deploy the rules alongside the Firestore ones:
+
+```
+npx firebase deploy --only firestore:rules,storage:rules --project the-forum-d9cb4
+```
+
 ## Links in posts
 
 URLs typed into a post, comment or reply become clickable, and get a
@@ -286,7 +347,7 @@ builds.
 ## Tests
 
 ```
-npm test           # both suites
+npm test           # every suite
 npm run test:activity   # pure logic, no emulator needed
 npm run test:rules      # needs `npm run emulators` running
 ```

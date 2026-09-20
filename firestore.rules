@@ -63,6 +63,16 @@ service cloud.firestore {
       return !(key in d) || d[key] == null || d[key] is bool;
     }
 
+    // Attached images live in Cloud Storage (see storage.rules); what lands
+    // here is only their metadata -- a URL, a path, a size, dimensions.
+    // Checked as a capped list rather than field-by-field, the same way the
+    // sibling apps type-check their nested structures: rules can't iterate
+    // a list, and storage.rules is what actually governs the bytes.
+    function attachmentsValid(d) {
+      return !('attachments' in d) ||
+        (d.attachments is list && d.attachments.size() <= 4);
+    }
+
     // Shared shape for the archive flag, which categories, threads and
     // posts all carry. Archiving is how anything with other people's
     // content under it goes away: a delete would take their replies with
@@ -147,7 +157,8 @@ service cloud.firestore {
         d.isInitial is bool &&
         d.createdAt is number &&
         archiveFieldsValid(d) &&
-        isOptionalNumber(d, 'editedAt');
+        isOptionalNumber(d, 'editedAt') &&
+        attachmentsValid(d);
     }
 
     match /posts/{postId} {
@@ -181,7 +192,8 @@ service cloud.firestore {
         d.createdAt is number &&
         isOptionalBool(d, 'deleted') &&
         isOptionalNumber(d, 'deletedAt') &&
-        isOptionalNumber(d, 'editedAt');
+        isOptionalNumber(d, 'editedAt') &&
+        attachmentsValid(d);
     }
 
     match /comments/{commentId} {
@@ -207,7 +219,8 @@ service cloud.firestore {
         d.authorName is string &&
         isBody(d.body) &&
         d.createdAt is number &&
-        isOptionalNumber(d, 'editedAt');
+        isOptionalNumber(d, 'editedAt') &&
+        attachmentsValid(d);
     }
 
     match /replies/{replyId} {

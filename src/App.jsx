@@ -238,23 +238,25 @@ function Shell({ user }) {
                 focusId={focusId}
                 onBack={() => window.history.back()}
                 handlers={{
-                  onAddPost: (body) =>
-                    addPost({ threadId: openThread.id, categoryId: openThread.categoryId, body }),
-                  onAddComment: (post, body) =>
+                  onAddPost: (body, attachments) =>
+                    addPost({ threadId: openThread.id, categoryId: openThread.categoryId, body, attachments }),
+                  onAddComment: (post, body, attachments) =>
                     addComment({
                       postId: post.id,
                       threadId: openThread.id,
                       categoryId: openThread.categoryId,
                       body,
+                      attachments,
                       onAuthorName: post.authorName,
                     }),
-                  onAddReply: (comment, body) =>
+                  onAddReply: (comment, body, attachments) =>
                     addReply({
                       commentId: comment.id,
                       postId: comment.postId,
                       threadId: openThread.id,
                       categoryId: openThread.categoryId,
                       body,
+                      attachments,
                       onAuthorName: comment.authorName,
                     }),
                   onEditThread: editThread,
@@ -276,8 +278,9 @@ function Shell({ user }) {
                 replies={replies}
                 roster={roster}
                 onOpenThread={(id) => navigate({ page: 'discussions', threadId: id })}
-                onCreateThread={({ title, body }) =>
-                  addThread({ categoryId: activeCategoryId, title, body })
+                me={user.uid}
+                onCreateThread={({ title, body, attachments }) =>
+                  addThread({ categoryId: activeCategoryId, title, body, attachments })
                 }
               />
             )}

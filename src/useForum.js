@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore';
-import { TOMBSTONE_BODY } from './theme.js';
+import { IMAGE_ONLY_BODY, TOMBSTONE_BODY } from './theme.js';
 import { db } from './firebase.js';
 
 const COLLECTIONS = ['categories', 'threads', 'posts', 'comments', 'replies', 'activityLog'];
@@ -204,9 +204,9 @@ export function useForum(user) {
   // separately would double-count starting a conversation in the
   // engagement chart, which is the one number the log exists to get right.
   const addThread = useCallback(
-    async ({ categoryId, title: rawTitle, body: rawBody }) => {
+    async ({ categoryId, title: rawTitle, body: rawBody, attachments = [] }) => {
       const title = rawTitle.trim();
-      const body = rawBody.trim();
+      const body = rawBody.trim() || (attachments.length ? IMAGE_ONLY_BODY : '');
       if (!title || !body) return null;
 
       const batch = writeBatch(db);
@@ -230,6 +230,7 @@ export function useForum(user) {
         body,
         isInitial: true,
         createdAt: now,
+        attachments,
       });
       batch.set(doc(collection(db, 'activityLog')), {
         ...actor,
@@ -248,8 +249,11 @@ export function useForum(user) {
   );
 
   const addPost = useCallback(
-    async ({ threadId, categoryId, body: rawBody }) => {
-      const body = rawBody.trim();
+    async ({ threadId, categoryId, body: rawBody, attachments = [] }) => {
+      // firestore.rules requires a non-empty body, so an image-only item
+      // gets a short stand-in rather than a relaxed rule -- the cap and
+      // the non-empty check are worth keeping for every real post.
+      const body = rawBody.trim() || (attachments.length ? IMAGE_ONLY_BODY : '');
       if (!body) return null;
       return commit({
         collectionName: 'posts',
@@ -261,6 +265,7 @@ export function useForum(user) {
           body,
           isInitial: false,
           createdAt: Date.now(),
+          attachments,
         },
         action: 'post.create',
         targetType: 'post',
@@ -273,8 +278,8 @@ export function useForum(user) {
   );
 
   const addComment = useCallback(
-    async ({ postId, threadId, categoryId, body: rawBody, onAuthorName }) => {
-      const body = rawBody.trim();
+    async ({ postId, threadId, categoryId, body: rawBody, onAuthorName, attachments = [] }) => {
+      const body = rawBody.trim() || (attachments.length ? IMAGE_ONLY_BODY : '');
       if (!body) return null;
       return commit({
         collectionName: 'comments',
@@ -286,6 +291,7 @@ export function useForum(user) {
           authorName: actor.actorName,
           body,
           createdAt: Date.now(),
+          attachments,
         },
         action: 'comment.create',
         targetType: 'comment',
@@ -298,8 +304,8 @@ export function useForum(user) {
   );
 
   const addReply = useCallback(
-    async ({ commentId, postId, threadId, categoryId, body: rawBody, onAuthorName }) => {
-      const body = rawBody.trim();
+    async ({ commentId, postId, threadId, categoryId, body: rawBody, onAuthorName, attachments = [] }) => {
+      const body = rawBody.trim() || (attachments.length ? IMAGE_ONLY_BODY : '');
       if (!body) return null;
       return commit({
         collectionName: 'replies',
@@ -312,6 +318,7 @@ export function useForum(user) {
           authorName: actor.actorName,
           body,
           createdAt: Date.now(),
+          attachments,
         },
         action: 'reply.create',
         targetType: 'reply',

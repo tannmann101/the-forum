@@ -6,6 +6,7 @@ import {
   persistentMultipleTabManager,
   connectFirestoreEmulator,
 } from 'firebase/firestore';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 export const useEmulator = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
 
@@ -57,7 +58,15 @@ export const setupNeeded = useEmulator
 export const isConfigured = setupNeeded === null;
 
 const firebaseConfig = useEmulator
-  ? { apiKey: 'demo-key', authDomain: 'localhost', projectId: 'demo-the-forum' }
+  ? {
+      apiKey: 'demo-key',
+      authDomain: 'localhost',
+      projectId: 'demo-the-forum',
+      // Needed even against the emulator: getStorage() resolves a bucket
+      // from this, and without it every upload fails with
+      // storage/no-default-bucket before it reaches the emulator at all.
+      storageBucket: 'demo-the-forum.appspot.com',
+    }
   : liveConfig;
 
 export const app = initializeApp(firebaseConfig);
@@ -67,8 +76,13 @@ export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
 
+// Attached images go here; only their metadata goes into Firestore. See
+// storage.rules for who may write what.
+export const storage = getStorage(app);
+
 // .env.local sets VITE_USE_FIREBASE_EMULATOR=true so local development never touches the real project.
 if (useEmulator) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  connectStorageEmulator(storage, '127.0.0.1', 9199);
 }

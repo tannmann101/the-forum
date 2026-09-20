@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArchivedNote, Body, Byline, Card, Composer, EmptyState, ItemActions, LinkPreviews, Tombstone } from '../ui.jsx';
+import { ArchivedNote, Attachments, Body, Byline, Card, Composer, EmptyState, ItemActions, LinkPreviews, Tombstone } from '../ui.jsx';
 
 const byTime = (a, b) => a.createdAt - b.createdAt;
 
@@ -32,6 +32,7 @@ function Reply({ reply, roster, me, editing, onStartEdit, onStopEdit, onEdit, on
       ) : (
         <>
           <Body>{reply.body}</Body>
+          <Attachments items={reply.attachments} size="sm" />
           <LinkPreviews text={reply.body} size="sm" />
           {mine ? (
             <ItemActions
@@ -87,6 +88,7 @@ function Comment({ comment, replies, roster, me, editingId, onStartEdit, onStopE
       ) : (
         <>
           <Body>{comment.body}</Body>
+          <Attachments items={comment.attachments} size="sm" />
           <LinkPreviews text={comment.body} size="sm" />
           {isMine ? (
             <ItemActions
@@ -135,7 +137,8 @@ function Comment({ comment, replies, roster, me, editingId, onStartEdit, onStopE
           submitLabel="Reply"
           placeholder={`Reply to ${comment.authorName}…`}
           rows={2}
-          onSubmit={(body) => handlers.onAddReply(comment, body)}
+          uid={me}
+          onSubmit={(body, attachments) => handlers.onAddReply(comment, body, attachments)}
         />
       </div>
     </li>
@@ -182,6 +185,7 @@ function Post({ post, comments, replies, roster, me, editingId, onStartEdit, onS
       ) : (
         <>
           <Body>{post.body}</Body>
+          <Attachments items={post.attachments} size="md" />
           <LinkPreviews text={post.body} size="md" />
           {isMine ? (
             <ItemActions
@@ -223,7 +227,8 @@ function Post({ post, comments, replies, roster, me, editingId, onStartEdit, onS
             submitLabel="Comment"
             placeholder={`Comment on ${post.authorName}'s post…`}
             rows={2}
-            onSubmit={(body) => handlers.onAddComment(post, body)}
+            uid={me}
+            onSubmit={(body, attachments) => handlers.onAddComment(post, body, attachments)}
           />
         </div>
       )}
@@ -391,6 +396,7 @@ export default function ThreadView({ thread, category, posts, comments, replies,
             submitLabel="Post"
             placeholder="Keep the thread going…"
             rows={4}
+            uid={me}
             onSubmit={guarded.onAddPost}
           />
         </Card>

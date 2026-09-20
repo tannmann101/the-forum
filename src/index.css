@@ -1533,3 +1533,160 @@ textarea.input {
   text-align: center;
   padding-left: 3px;
 }
+
+/* ---------- Attached images ---------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The tray on a composer: what's queued, still uploading, or failed. */
+.attach-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.attach-item {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--card-soft);
+}
+
+.attach-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.attach-item.is-uploading img {
+  opacity: 0.55;
+}
+
+.attach-item.is-error img {
+  opacity: 0.3;
+}
+
+.attach-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--forum);
+  transition: width 120ms linear;
+}
+
+.attach-failed {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 3px 5px;
+  background: var(--red);
+  color: #FFFFFF;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.attach-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.62);
+  color: #FFFFFF;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.attach-remove:hover {
+  background: var(--red);
+}
+
+.picker-actions {
+  margin-top: 8px;
+}
+
+/* Saved attachments: a contact sheet under the body. A single image gets
+   room to breathe; several tile. Clicking any opens the original. */
+.attachments {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  max-width: 520px;
+}
+
+.attachments.is-sm {
+  max-width: 380px;
+}
+
+.attachments.count-1 {
+  grid-template-columns: 1fr;
+}
+
+.attachments.count-2,
+.attachments.count-4 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.attachments.count-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.attachment {
+  display: block;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--card-soft);
+  line-height: 0;
+  transition: border-color var(--transition);
+}
+
+.attachment:hover {
+  border-color: var(--forum);
+}
+
+.attachment img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Height is capped rather than free so one very tall photo can't push
+     the rest of the thread off the screen. */
+  max-height: 340px;
+}
+
+.attachments.count-1 .attachment img {
+  max-height: 420px;
+  object-fit: contain;
+  background: var(--card-soft);
+}
+
+.attachments:not(.count-1) .attachment {
+  aspect-ratio: 1;
+}
+
+@media (max-width: 520px) {
+  .attachments,
+  .attachments.is-sm {
+    max-width: none;
+  }
+}
