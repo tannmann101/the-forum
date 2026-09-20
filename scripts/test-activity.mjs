@@ -16,6 +16,7 @@ import {
   totalsByPerson,
 } from '../src/lib/activity.js';
 import { toCSV } from '../src/lib/csv.js';
+import { ACTIONS as ACTIONS_FOR_TEST } from '../src/theme.js';
 import { dayKey, endOfDay, relativeTime, startOfDay, weekKey, monthKey } from '../src/lib/time.js';
 
 // A fixed local-time date so these assertions don't drift with the clock.
@@ -187,4 +188,32 @@ test('toCSV survives a breadcrumb with a comma in a category name', () => {
     () => 'Added post',
   );
   assert.match(toCSV(CSV_HEADERS, rows), /"House, Yard › Fence"/);
+});
+
+test('every action in theme.js is accepted by firestore.rules, and vice versa', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { ACTIONS, ACTION_ORDER } = await import('../src/theme.js');
+  const rules = readFileSync('firestore.rules', 'utf8');
+
+  const inRules = [
+    ...new Set(
+      [...rules.matchAll(/'((?:category|thread|post|comment|reply)\.[a-z]+)'/g)].map((m) => m[1]),
+    ),
+  ].sort();
+
+  // The two lists are edited in different files and drift silently: a new
+  // action in the UI that the rules reject fails only at write time, in
+  // production. Pin them together here instead.
+  assert.deepEqual(Object.keys(ACTIONS).sort(), inRules);
+  assert.equal(ACTION_ORDER.length, inRules.length);
+  assert.ok(inRules.includes('comment.delete'), 'deletes must be loggable');
+  assert.ok(inRules.includes('post.archive'), 'archives must be loggable');
+});
+
+test('every action has a label and colours for the pill', () => {
+  for (const [key, meta] of Object.entries(ACTIONS_FOR_TEST)) {
+    assert.ok(meta.label, `${key} needs a label`);
+    assert.match(meta.color, /^#[0-9A-Fa-f]{6}$/, `${key} needs a colour`);
+    assert.match(meta.soft, /^#[0-9A-Fa-f]{6}$/, `${key} needs a soft colour`);
+  }
 });

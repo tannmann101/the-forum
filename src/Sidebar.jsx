@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { MAX_CATEGORY_NAME } from './theme.js';
 
-function CategoryRow({ category, active, count, onSelect, onRename, onArchive, onUnarchive }) {
+function CategoryRow({ category, active, count, me, onSelect, onRename, onArchive, onUnarchive }) {
+  // Categories are creator-only to change. firestore.rules enforces the
+  // same check against the stored document; hiding the buttons just keeps
+  // the UI from offering something the database will refuse.
+  const isMine = category.createdBy === me;
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(category.name);
 
@@ -56,27 +60,29 @@ function CategoryRow({ category, active, count, onSelect, onRename, onArchive, o
         <span className="cat-name">{category.name}</span>
         <span className="cat-count">{count}</span>
       </button>
-      <div className="cat-actions">
-        <button
-          type="button"
-          className="link-btn"
-          onClick={() => {
-            setDraft(category.name);
-            setRenaming(true);
-          }}
-        >
-          Rename
-        </button>
-        {category.archived ? (
-          <button type="button" className="link-btn" onClick={() => onUnarchive(category.id)}>
-            Unarchive
+      {isMine ? (
+        <div className="cat-actions">
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setDraft(category.name);
+              setRenaming(true);
+            }}
+          >
+            Rename
           </button>
-        ) : (
-          <button type="button" className="link-btn" onClick={() => onArchive(category.id)}>
-            Archive
-          </button>
-        )}
-      </div>
+          {category.archived ? (
+            <button type="button" className="link-btn" onClick={() => onUnarchive(category.id)}>
+              Unarchive
+            </button>
+          ) : (
+            <button type="button" className="link-btn" onClick={() => onArchive(category.id)}>
+              Archive
+            </button>
+          )}
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -88,6 +94,7 @@ export default function Sidebar({
   categories,
   threadCounts,
   selectedId,
+  me,
   onSelect,
   onAdd,
   onRename,
@@ -109,7 +116,7 @@ export default function Sidebar({
     setAdding(false);
   };
 
-  const rowProps = { onSelect, onRename, onArchive, onUnarchive };
+  const rowProps = { me, onSelect, onRename, onArchive, onUnarchive };
 
   return (
     <aside className="sidebar">

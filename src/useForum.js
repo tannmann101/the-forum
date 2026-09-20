@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { TOMBSTONE_BODY } from './theme.js';
 import { db } from './firebase.js';
 
 const COLLECTIONS = ['categories', 'threads', 'posts', 'comments', 'replies', 'activityLog'];
@@ -65,7 +66,17 @@ export function useForum(user) {
   // `touchThreadId` bumps the thread's lastActivityAt in the same batch,
   // which is what the thread list sorts on.
   const commit = useCallback(
-    async ({ collectionName, docData, action, targetType, breadcrumb, categoryId, touchThreadId, updates = [] }) => {
+    async ({
+      collectionName,
+      docData,
+      action,
+      targetType,
+      breadcrumb,
+      categoryId,
+      touchThreadId,
+      updates = [],
+      deletePath = null,
+    }) => {
       const batch = writeBatch(db);
       const now = Date.now();
 
@@ -79,6 +90,14 @@ export function useForum(user) {
       for (const { path, fields } of updates) {
         batch.update(doc(db, ...path), fields);
         if (!targetId) targetId = path[path.length - 1];
+      }
+
+      // A real delete goes in the same batch as its log entry, exactly like
+      // a create does -- so content never disappears without the log
+      // recording that it was deleted, and a rejected write leaves both.
+      if (deletePath) {
+        batch.delete(doc(db, ...deletePath));
+        if (!targetId) targetId = deletePath[deletePath.length - 1];
       }
 
       if (touchThreadId) {
@@ -304,6 +323,159 @@ export function useForum(user) {
     [actor, categoryName, commit, threadTitle],
   );
 
+  // ---------- Owner-only edits, archives and deletes ----------
+  //
+  // Everything below is gated on the signed-in user having created the
+  // thing, and firestore.rules enforces the same check against the stored
+  // document -- these guards are for the UI's benefit, not the security
+  // boundary. Each one writes its own activity-log action, so the log
+  // records that something was changed or removed rather than silently
+  // losing the fact.
+
+  const editThread = useCallback(
+    async (thread, rawTitle) => {
+      const title = rawTitle.trim();
+      if (!title || title === thread.title) return;
+      await commit({
+        action: 'thread.rename',
+        targetType: 'thread',
+        breadcrumb: `${categoryName(thread.categoryId)}${CRUMB}${thread.title} → ${title}`,
+        categoryId: thread.categoryId,
+        updates: [{ path: ['threads', thread.id], fields: { title, editedAt: Date.now() } }],
+      });
+    },
+    [categoryName, commit],
+  );
+
+  const setThreadArchived = useCallback(
+    async (thread, archived) => {
+      await commit({
+        action: archived ? 'thread.archive' : 'thread.unarchive',
+        targetType: 'thread',
+        breadcrumb: `${categoryName(thread.categoryId)}${CRUMB}${thread.title}`,
+        categoryId: thread.categoryId,
+        updates: [
+          {
+            path: ['threads', thread.id],
+            fields: archived
+              ? { archived: true, archivedAt: Date.now(), archivedBy: actor.actorId }
+              : { archived: false, archivedAt: null, archivedBy: null },
+          },
+        ],
+      });
+    },
+    [actor, categoryName, commit],
+  );
+
+  const editPost = useCallback(
+    async (post, rawBody) => {
+      const body = rawBody.trim();
+      if (!body || body === post.body) return;
+      await commit({
+        action: 'post.edit',
+        targetType: 'post',
+        breadcrumb: `${categoryName(post.categoryId)}${CRUMB}${threadTitle(post.threadId)}`,
+        categoryId: post.categoryId,
+        updates: [{ path: ['posts', post.id], fields: { body, editedAt: Date.now() } }],
+      });
+    },
+    [categoryName, commit, threadTitle],
+  );
+
+  const setPostArchived = useCallback(
+    async (post, archived) => {
+      await commit({
+        action: archived ? 'post.archive' : 'post.unarchive',
+        targetType: 'post',
+        breadcrumb: `${categoryName(post.categoryId)}${CRUMB}${threadTitle(post.threadId)}`,
+        categoryId: post.categoryId,
+        updates: [
+          {
+            path: ['posts', post.id],
+            fields: archived
+              ? { archived: true, archivedAt: Date.now(), archivedBy: actor.actorId }
+              : { archived: false, archivedAt: null, archivedBy: null },
+          },
+        ],
+      });
+    },
+    [actor, categoryName, commit, threadTitle],
+  );
+
+  const editComment = useCallback(
+    async (comment, rawBody) => {
+      const body = rawBody.trim();
+      if (!body || body === comment.body) return;
+      await commit({
+        action: 'comment.edit',
+        targetType: 'comment',
+        breadcrumb: `${categoryName(comment.categoryId)}${CRUMB}${threadTitle(comment.threadId)}`,
+        categoryId: comment.categoryId,
+        updates: [{ path: ['comments', comment.id], fields: { body, editedAt: Date.now() } }],
+      });
+    },
+    [categoryName, commit, threadTitle],
+  );
+
+  // A comment with replies hanging off it is tombstoned rather than
+  // removed: deleting the document would strand replies someone else
+  // wrote, out of context and unreachable. A childless one really goes.
+  // Which happened is visible in the log either way -- both are
+  // 'comment.delete', and the breadcrumb says which.
+  const deleteComment = useCallback(
+    async (comment) => {
+      const hasReplies = dataRef.current.replies.some((r) => r.commentId === comment.id);
+      const where = `${categoryName(comment.categoryId)}${CRUMB}${threadTitle(comment.threadId)}`;
+      await commit({
+        action: 'comment.delete',
+        targetType: 'comment',
+        breadcrumb: hasReplies ? `${where}${CRUMB}kept as a tombstone (it had replies)` : where,
+        categoryId: comment.categoryId,
+        ...(hasReplies
+          ? {
+              updates: [
+                {
+                  path: ['comments', comment.id],
+                  fields: { body: TOMBSTONE_BODY, deleted: true, deletedAt: Date.now() },
+                },
+              ],
+            }
+          : { deletePath: ['comments', comment.id] }),
+      });
+    },
+    [categoryName, commit, threadTitle],
+  );
+
+  const editReply = useCallback(
+    async (reply, rawBody) => {
+      const body = rawBody.trim();
+      if (!body || body === reply.body) return;
+      await commit({
+        action: 'reply.edit',
+        targetType: 'reply',
+        breadcrumb: `${categoryName(reply.categoryId)}${CRUMB}${threadTitle(reply.threadId)}`,
+        categoryId: reply.categoryId,
+        updates: [{ path: ['replies', reply.id], fields: { body, editedAt: Date.now() } }],
+      });
+    },
+    [categoryName, commit, threadTitle],
+  );
+
+  // Replies never nest further, so there is never anything underneath to
+  // strand -- no tombstone case, it just goes.
+  const deleteReply = useCallback(
+    async (reply) => {
+      await commit({
+        action: 'reply.delete',
+        targetType: 'reply',
+        breadcrumb: `${categoryName(reply.categoryId)}${CRUMB}${threadTitle(reply.threadId)}`,
+        categoryId: reply.categoryId,
+        deletePath: ['replies', reply.id],
+      });
+    },
+    [categoryName, commit, threadTitle],
+  );
+
   return {
     ...(data || EMPTY),
     status,
@@ -314,5 +486,13 @@ export function useForum(user) {
     addPost,
     addComment,
     addReply,
+    editThread,
+    setThreadArchived,
+    editPost,
+    setPostArchived,
+    editComment,
+    deleteComment,
+    editReply,
+    deleteReply,
   };
 }

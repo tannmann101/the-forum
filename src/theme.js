@@ -27,6 +27,8 @@ export const PLUM = '#7A5385';
 export const PLUM_SOFT = '#ECE2EF';
 export const AMBER = '#C2963C';
 export const AMBER_SOFT = '#F4E9CC';
+export const RED = '#B4462F';
+export const RED_SOFT = '#F6E0DA';
 
 export const RADIUS = 14;
 export const RADIUS_SM = 9;
@@ -37,14 +39,24 @@ export const TRANSITION = '140ms ease';
 // this instead of each keeping their own copy of the string list. Adding an
 // action means adding it here and to actionValues() in firestore.rules.
 export const ACTIONS = {
-  'category.create': { label: 'Created category', verb: 'created the category', color: PLUM, soft: PLUM_SOFT },
-  'category.rename': { label: 'Renamed category', verb: 'renamed a category', color: AMBER, soft: AMBER_SOFT },
-  'category.archive': { label: 'Archived category', verb: 'archived the category', color: MUTE, soft: CARD_SOFT },
-  'category.unarchive': { label: 'Unarchived category', verb: 'unarchived the category', color: SAGE, soft: SAGE_SOFT },
-  'thread.create': { label: 'Started thread', verb: 'started the thread', color: FORUM, soft: FORUM_SOFT },
-  'post.create': { label: 'Added post', verb: 'posted in', color: CLAY, soft: CLAY_SOFT },
-  'comment.create': { label: 'Commented', verb: 'commented on a post in', color: SAGE, soft: SAGE_SOFT },
-  'reply.create': { label: 'Replied', verb: 'replied to a comment in', color: PLUM, soft: PLUM_SOFT },
+  'category.create': { label: 'Created category', color: PLUM, soft: PLUM_SOFT },
+  'category.rename': { label: 'Renamed category', color: AMBER, soft: AMBER_SOFT },
+  'category.archive': { label: 'Archived category', color: MUTE, soft: CARD_SOFT },
+  'category.unarchive': { label: 'Unarchived category', color: SAGE, soft: SAGE_SOFT },
+  'thread.create': { label: 'Started thread', color: FORUM, soft: FORUM_SOFT },
+  'thread.rename': { label: 'Retitled thread', color: AMBER, soft: AMBER_SOFT },
+  'thread.archive': { label: 'Archived thread', color: MUTE, soft: CARD_SOFT },
+  'thread.unarchive': { label: 'Unarchived thread', color: SAGE, soft: SAGE_SOFT },
+  'post.create': { label: 'Added post', color: CLAY, soft: CLAY_SOFT },
+  'post.edit': { label: 'Edited post', color: AMBER, soft: AMBER_SOFT },
+  'post.archive': { label: 'Archived post', color: MUTE, soft: CARD_SOFT },
+  'post.unarchive': { label: 'Unarchived post', color: SAGE, soft: SAGE_SOFT },
+  'comment.create': { label: 'Commented', color: SAGE, soft: SAGE_SOFT },
+  'comment.edit': { label: 'Edited comment', color: AMBER, soft: AMBER_SOFT },
+  'comment.delete': { label: 'Deleted comment', color: RED, soft: RED_SOFT },
+  'reply.create': { label: 'Replied', color: PLUM, soft: PLUM_SOFT },
+  'reply.edit': { label: 'Edited reply', color: AMBER, soft: AMBER_SOFT },
+  'reply.delete': { label: 'Deleted reply', color: RED, soft: RED_SOFT },
 };
 
 export const ACTION_ORDER = Object.keys(ACTIONS);
@@ -65,3 +77,7 @@ export function personColor(personId, roster) {
 export const MAX_BODY = 20000;
 export const MAX_TITLE = 140;
 export const MAX_CATEGORY_NAME = 60;
+
+// Body of a comment that was deleted while replies still hung off it. The
+// document stays so its replies keep their context, but the text is gone.
+export const TOMBSTONE_BODY = '[deleted]';

@@ -69,23 +69,68 @@ into render code.
 
 ## What can and can't change
 
-Posts, comments, replies and log entries are **append-only** -- no edit, no
-delete, not even a soft-delete flag. That's enforced in `firestore.rules`
-(`allow update, delete: if false`), not just hidden in the UI, because "the
-activity log is a permanent record" only holds if the conversation underneath
-it can't be rewritten.
+Everything is **creator-only**: you can edit and remove what you made, and
+nothing else. `firestore.rules` enforces that by reading ownership off the
+*stored* document, never the incoming one, so rewriting the owner field
+can't be used to grant yourself the edit. The UI hides buttons you can't
+use, but that's a convenience — the database is the boundary.
 
-Categories are the one mutable thing: they can be renamed and
-archived/unarchived, and the rules restrict updates to exactly those fields,
-so a category's authorship can't be rewritten either. Nothing is ever
-hard-deleted, so every breadcrumb in the log keeps pointing at something that
-still exists.
+| | Edit | Remove |
+|---|---|---|
+| Category | rename | archive only, never deleted |
+| Thread | retitle | archive only |
+| Post | edit body | archive only |
+| Comment | edit body | **deleted** — or tombstoned, see below |
+| Reply | edit body | **deleted** |
 
-Threads take exactly one kind of update: the `lastActivityAt` stamp the thread
-list sorts on. Titles are fixed once written.
+Anything with other people's content hanging off it is **archived rather
+than deleted**: deleting a category, thread or post would take someone
+else's threads, posts or comments with it, and would leave activity-log
+breadcrumbs pointing at nothing. Archived items keep their shell, hide
+their body, and can be brought back by whoever owns them. Archived threads
+collapse into their own section in the thread list, the same way archived
+categories do in the sidebar.
 
-Out of scope for this build, deliberately: reactions, notifications, and
-reply-to-reply nesting.
+Comments are the one thing that really deletes. A comment with replies
+under it is **tombstoned** instead — the document stays so the replies keep
+their context, with the body replaced by `[deleted]` — while a childless
+one is removed outright. The rules permit both shapes (they can't count
+replies); the client picks, and the activity log's breadcrumb records which
+happened. Replies never nest further, so there's never anything underneath
+to strand: they always delete for real.
+
+Threads take one update anyone can make: the `lastActivityAt` stamp the
+thread list sorts on. Requiring ownership there would mean a reply to
+someone else's thread couldn't move it to the top of the list. That's a
+separate rule path from the owner-only retitle/archive.
+
+**The activity log is still append-only**, even though the content no
+longer is. That's the point rather than a contradiction: edits and deletes
+are themselves logged actions, so removing something records that it was
+removed instead of quietly erasing that it ever existed. There are 18
+actions, and `npm run test:activity` pins the list in `theme.js` against
+`firestore.rules` so the two can't drift.
+
+Out of scope, deliberately: reactions, notifications, and reply-to-reply
+nesting.
+
+## Navigation and the back gesture
+
+Navigation lives in real browser history rather than React state. Opening a
+thread or the activity log pushes an entry; switching category replaces one,
+so going back doesn't walk you through every category you clicked.
+
+That means the platform's own back gesture just works — the iOS/Android
+edge swipe, the Android hardware back button and the browser back button
+all pop history, so one mechanism covers all of them and there's no custom
+touch handling to fight with the OS.
+
+On mount the app replaces the current history entry with an `exit` marker
+and pushes its first screen on top. That guarantees exactly one entry below
+the app, so backing out of the root screen lands on the marker and sends you
+to `thegardners.xyz` — whether or not you actually arrived from there. So on
+a phone: first swipe back out of a thread returns you to the thread list,
+the next takes you to the family site.
 
 ## Access
 

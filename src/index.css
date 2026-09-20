@@ -14,6 +14,7 @@
   --forum: #2E5E7E;
   --forum-soft: #DEE9F0;
   --forum-deep: #22485F;
+  --red: #B4462F;
   --clay: #C07744;
   --radius: 14px;
   --radius-sm: 9px;
@@ -1090,4 +1091,87 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* ---------- Ownership: edit / archive / delete ---------- */
+
+/* The action row under something you wrote. Shown only to the owner, which
+   is a UI convenience -- firestore.rules is what actually enforces it. */
+.item-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 9px;
+}
+
+.link-btn.is-danger {
+  color: var(--red);
+}
+
+.link-btn.is-danger:hover {
+  color: #8E3624;
+}
+
+/* A quiet marker rather than a badge: an edit is worth disclosing, not
+   worth shouting about. */
+.edited-tag {
+  font-size: 11px;
+  color: var(--mute);
+  font-style: italic;
+}
+
+/* A comment deleted while replies still hung off it. The document stays so
+   the replies keep their context; only the text is gone. */
+.tombstone {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  font-style: italic;
+  color: var(--mute);
+}
+
+/* An archived post or thread: the shell stays, the body is hidden. */
+.archived-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 9px 12px;
+  background: var(--card-soft);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.post.is-archived,
+.thread-row.is-archived {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.post.is-archived .byline-name,
+.thread-row.is-archived .thread-open h3 {
+  color: var(--ink-soft);
+}
+
+.thread-row.is-archived {
+  border-style: dashed;
+}
+
+.title-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 560px;
+}
+
+.title-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* The thread list's archived block reuses the sidebar's collapse styling,
+   so archived threads and archived categories read the same way. */
+.thread-list + .archived-block,
+.empty-state + .archived-block {
+  margin-top: 22px;
 }

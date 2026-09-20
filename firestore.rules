@@ -21,6 +21,25 @@ service cloud.firestore {
       return uid == request.auth.uid;
     }
 
+    // You may change what you made, and only what you made. Read against
+    // the EXISTING document, never the incoming one, so a rewrite of the
+    // ownership field can't be used to grant yourself the edit.
+    function ownsExisting(field) {
+      return resource.data[field] == request.auth.uid;
+    }
+
+    function changed(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // Ownership, authorship and creation time are never editable, on
+    // anything. An edit changes what you said, not who said it or when.
+    function identityIntact(ownerField, nameField, createdField) {
+      return request.resource.data[ownerField] == resource.data[ownerField] &&
+        request.resource.data[nameField] == resource.data[nameField] &&
+        request.resource.data[createdField] == resource.data[createdField];
+    }
+
     function isText(v, max) {
       return v is string && v.size() > 0 && v.size() <= max;
     }
@@ -40,11 +59,21 @@ service cloud.firestore {
       return !(key in d) || d[key] == null || d[key] is string;
     }
 
+    function isOptionalBool(d, key) {
+      return !(key in d) || d[key] == null || d[key] is bool;
+    }
+
+    // Shared shape for the archive flag, which categories, threads and
+    // posts all carry. Archiving is how anything with other people's
+    // content under it goes away: a delete would take their replies with
+    // it, and would leave the activity log pointing at nothing.
+    function archiveFieldsValid(d) {
+      return isOptionalBool(d, 'archived') &&
+        isOptionalNumber(d, 'archivedAt') &&
+        isOptionalString(d, 'archivedBy');
+    }
+
     // ---------- Categories ----------
-    // The only content that is ever mutable: renaming and archiving.
-    // Archiving is a flag, never a delete -- threads under an archived
-    // category stay readable, and the activity log keeps pointing at a
-    // category that still exists.
     function isValidCategory(d) {
       return isText(d.name, 60) &&
         d.createdBy is string &&
@@ -53,17 +82,21 @@ service cloud.firestore {
         d.archived is bool &&
         d.order is number &&
         isOptionalNumber(d, 'archivedAt') &&
-        isOptionalString(d, 'archivedBy');
+        isOptionalString(d, 'archivedBy') &&
+        isOptionalNumber(d, 'editedAt');
     }
 
     match /categories/{categoryId} {
       allow read: if isAllowed();
       allow create: if isAllowed() && isValidCategory(request.resource.data) && isSelf(request.resource.data.createdBy);
-      // Renames and archive/unarchive only. createdBy/createdAt can't be
-      // rewritten, so a category's authorship stays honest.
-      allow update: if isAllowed() && isValidCategory(request.resource.data) &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['name', 'archived', 'archivedAt', 'archivedBy', 'order']);
+      // Rename and archive/unarchive, by whoever created it. Never deleted:
+      // threads hang off a category, and every activity-log breadcrumb
+      // assumes the category it names still exists.
+      allow update: if isAllowed() &&
+        ownsExisting('createdBy') &&
+        isValidCategory(request.resource.data) &&
+        identityIntact('createdBy', 'createdByName', 'createdAt') &&
+        changed(['name', 'archived', 'archivedAt', 'archivedBy', 'order', 'editedAt']);
       allow delete: if false;
     }
 
@@ -74,25 +107,37 @@ service cloud.firestore {
         d.createdBy is string &&
         d.createdByName is string &&
         d.createdAt is number &&
-        d.lastActivityAt is number;
+        d.lastActivityAt is number &&
+        archiveFieldsValid(d) &&
+        isOptionalNumber(d, 'editedAt');
     }
 
     match /threads/{threadId} {
       allow read: if isAllowed();
       allow create: if isAllowed() && isValidThread(request.resource.data) && isSelf(request.resource.data.createdBy);
-      // A thread is never edited -- the only thing that moves is the
-      // "most recent activity" stamp the thread list sorts on, which every
-      // new post/comment/reply bumps in the same batch as the content write.
-      allow update: if isAllowed() && isValidThread(request.resource.data) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastActivityAt']);
+
+      // Two separate update paths, deliberately.
+      //
+      // Anyone may bump lastActivityAt and nothing else -- that stamp is
+      // what the thread list sorts on, and every new post, comment and
+      // reply bumps it in the same batch as the content write. Requiring
+      // ownership here would mean Rochelle replying to Tanner's thread
+      // couldn't move it to the top of the list.
+      //
+      // The creator, separately, may retitle or archive it. A thread is
+      // never deleted, for the same reason a category isn't.
+      allow update: if isAllowed() && isValidThread(request.resource.data) && (
+        changed(['lastActivityAt']) ||
+        (
+          ownsExisting('createdBy') &&
+          identityIntact('createdBy', 'createdByName', 'createdAt') &&
+          changed(['title', 'archived', 'archivedAt', 'archivedBy', 'editedAt', 'lastActivityAt'])
+        )
+      );
       allow delete: if false;
     }
 
-    // ---------- Posts / comments / replies ----------
-    // Append-only, all three. No edit, no delete, no soft-delete flag: the
-    // activity log is meant to be a permanent record of the conversation,
-    // and that only holds if the conversation itself can't be rewritten
-    // out from under it.
+    // ---------- Posts ----------
     function isValidPost(d) {
       return d.threadId is string &&
         d.categoryId is string &&
@@ -100,9 +145,32 @@ service cloud.firestore {
         d.authorName is string &&
         isBody(d.body) &&
         d.isInitial is bool &&
-        d.createdAt is number;
+        d.createdAt is number &&
+        archiveFieldsValid(d) &&
+        isOptionalNumber(d, 'editedAt');
     }
 
+    match /posts/{postId} {
+      allow read: if isAllowed();
+      allow create: if isAllowed() && isValidPost(request.resource.data) && isSelf(request.resource.data.authorId);
+      // Edit the body or archive it, author only. Archive rather than
+      // delete: comments hang off a post, and deleting one would take
+      // someone else's comments with it.
+      allow update: if isAllowed() &&
+        ownsExisting('authorId') &&
+        isValidPost(request.resource.data) &&
+        identityIntact('authorId', 'authorName', 'createdAt') &&
+        request.resource.data.isInitial == resource.data.isInitial &&
+        changed(['body', 'editedAt', 'archived', 'archivedAt', 'archivedBy']);
+      allow delete: if false;
+    }
+
+    // ---------- Comments ----------
+    // The one thing that really deletes. A comment with replies under it
+    // is tombstoned instead (deleted:true, body replaced), so the replies
+    // stay readable and in context; a childless one is removed outright.
+    // The rules can't count replies, so they permit both shapes and the
+    // client picks -- the activity log records which happened either way.
     function isValidComment(d) {
       return d.postId is string &&
         d.threadId is string &&
@@ -110,9 +178,26 @@ service cloud.firestore {
         d.authorId is string &&
         d.authorName is string &&
         isBody(d.body) &&
-        d.createdAt is number;
+        d.createdAt is number &&
+        isOptionalBool(d, 'deleted') &&
+        isOptionalNumber(d, 'deletedAt') &&
+        isOptionalNumber(d, 'editedAt');
     }
 
+    match /comments/{commentId} {
+      allow read: if isAllowed();
+      allow create: if isAllowed() && isValidComment(request.resource.data) && isSelf(request.resource.data.authorId);
+      allow update: if isAllowed() &&
+        ownsExisting('authorId') &&
+        isValidComment(request.resource.data) &&
+        identityIntact('authorId', 'authorName', 'createdAt') &&
+        changed(['body', 'editedAt', 'deleted', 'deletedAt']);
+      allow delete: if isAllowed() && ownsExisting('authorId');
+    }
+
+    // ---------- Replies ----------
+    // Replies never nest further, so there is never anything underneath to
+    // strand: they delete outright, no tombstone case.
     function isValidReply(d) {
       return d.commentId is string &&
         d.postId is string &&
@@ -121,36 +206,37 @@ service cloud.firestore {
         d.authorId is string &&
         d.authorName is string &&
         isBody(d.body) &&
-        d.createdAt is number;
-    }
-
-    match /posts/{postId} {
-      allow read: if isAllowed();
-      allow create: if isAllowed() && isValidPost(request.resource.data) && isSelf(request.resource.data.authorId);
-      allow update, delete: if false;
-    }
-
-    match /comments/{commentId} {
-      allow read: if isAllowed();
-      allow create: if isAllowed() && isValidComment(request.resource.data) && isSelf(request.resource.data.authorId);
-      allow update, delete: if false;
+        d.createdAt is number &&
+        isOptionalNumber(d, 'editedAt');
     }
 
     match /replies/{replyId} {
       allow read: if isAllowed();
       allow create: if isAllowed() && isValidReply(request.resource.data) && isSelf(request.resource.data.authorId);
-      allow update, delete: if false;
+      allow update: if isAllowed() &&
+        ownsExisting('authorId') &&
+        isValidReply(request.resource.data) &&
+        identityIntact('authorId', 'authorName', 'createdAt') &&
+        changed(['body', 'editedAt']);
+      allow delete: if isAllowed() && ownsExisting('authorId');
     }
 
     // ---------- Activity log ----------
-    // One document per create/rename/archive action, written in the same
-    // batch as the content it describes -- so a post that exists always has
-    // a log entry, and a failed write leaves neither behind. Append-only
-    // like the content it tracks.
+    // One document per action, written in the same batch as the content it
+    // describes -- so a post that exists always has a log entry, and a
+    // failed write leaves neither behind.
+    //
+    // The log is still append-only even though the content no longer is.
+    // That is the whole point: edits and deletes are themselves logged, so
+    // removing something records that it was removed rather than quietly
+    // erasing that it ever existed.
     function actionValues() {
       return [
         'category.create', 'category.rename', 'category.archive', 'category.unarchive',
-        'thread.create', 'post.create', 'comment.create', 'reply.create'
+        'thread.create', 'thread.rename', 'thread.archive', 'thread.unarchive',
+        'post.create', 'post.edit', 'post.archive', 'post.unarchive',
+        'comment.create', 'comment.edit', 'comment.delete',
+        'reply.create', 'reply.edit', 'reply.delete'
       ];
     }
 
