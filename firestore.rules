@@ -1,0 +1,182 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Same family allow-list as the sibling apps (household-ledger,
+    // roc-workspace). Google sign-in proves who you are; this decides
+    // whether you get in at all. Adding someone to the forum means adding
+    // their address here and redeploying the rules -- there is no in-app
+    // invite flow on purpose.
+    function isAllowed() {
+      return request.auth != null &&
+        request.auth.token.email in [
+          'tannerwesgardner@gmail.com',
+          'rochelleygardner@gmail.com'
+        ];
+    }
+
+    // Writes always claim an author/actor, and it always has to be the
+    // person actually signed in -- nobody gets to post or log activity
+    // under someone else's name, even by hand from a console.
+    function isSelf(uid) {
+      return uid == request.auth.uid;
+    }
+
+    function isText(v, max) {
+      return v is string && v.size() > 0 && v.size() <= max;
+    }
+
+    // Bodies are capped well under Firestore's 1 MiB document limit; the
+    // composer enforces the same number so a too-long post fails in the
+    // form rather than at the database.
+    function isBody(v) {
+      return isText(v, 20000);
+    }
+
+    function isOptionalNumber(d, key) {
+      return !(key in d) || d[key] == null || d[key] is number;
+    }
+
+    function isOptionalString(d, key) {
+      return !(key in d) || d[key] == null || d[key] is string;
+    }
+
+    // ---------- Categories ----------
+    // The only content that is ever mutable: renaming and archiving.
+    // Archiving is a flag, never a delete -- threads under an archived
+    // category stay readable, and the activity log keeps pointing at a
+    // category that still exists.
+    function isValidCategory(d) {
+      return isText(d.name, 60) &&
+        d.createdBy is string &&
+        d.createdByName is string &&
+        d.createdAt is number &&
+        d.archived is bool &&
+        d.order is number &&
+        isOptionalNumber(d, 'archivedAt') &&
+        isOptionalString(d, 'archivedBy');
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isAllowed();
+      allow create: if isAllowed() && isValidCategory(request.resource.data) && isSelf(request.resource.data.createdBy);
+      // Renames and archive/unarchive only. createdBy/createdAt can't be
+      // rewritten, so a category's authorship stays honest.
+      allow update: if isAllowed() && isValidCategory(request.resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'archived', 'archivedAt', 'archivedBy', 'order']);
+      allow delete: if false;
+    }
+
+    // ---------- Threads ----------
+    function isValidThread(d) {
+      return d.categoryId is string &&
+        isText(d.title, 140) &&
+        d.createdBy is string &&
+        d.createdByName is string &&
+        d.createdAt is number &&
+        d.lastActivityAt is number;
+    }
+
+    match /threads/{threadId} {
+      allow read: if isAllowed();
+      allow create: if isAllowed() && isValidThread(request.resource.data) && isSelf(request.resource.data.createdBy);
+      // A thread is never edited -- the only thing that moves is the
+      // "most recent activity" stamp the thread list sorts on, which every
+      // new post/comment/reply bumps in the same batch as the content write.
+      allow update: if isAllowed() && isValidThread(request.resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastActivityAt']);
+      allow delete: if false;
+    }
+
+    // ---------- Posts / comments / replies ----------
+    // Append-only, all three. No edit, no delete, no soft-delete flag: the
+    // activity log is meant to be a permanent record of the conversation,
+    // and that only holds if the conversation itself can't be rewritten
+    // out from under it.
+    function isValidPost(d) {
+      return d.threadId is string &&
+        d.categoryId is string &&
+        d.authorId is string &&
+        d.authorName is string &&
+        isBody(d.body) &&
+        d.isInitial is bool &&
+        d.createdAt is number;
+    }
+
+    function isValidComment(d) {
+      return d.postId is string &&
+        d.threadId is string &&
+        d.categoryId is string &&
+        d.authorId is string &&
+        d.authorName is string &&
+        isBody(d.body) &&
+        d.createdAt is number;
+    }
+
+    function isValidReply(d) {
+      return d.commentId is string &&
+        d.postId is string &&
+        d.threadId is string &&
+        d.categoryId is string &&
+        d.authorId is string &&
+        d.authorName is string &&
+        isBody(d.body) &&
+        d.createdAt is number;
+    }
+
+    match /posts/{postId} {
+      allow read: if isAllowed();
+      allow create: if isAllowed() && isValidPost(request.resource.data) && isSelf(request.resource.data.authorId);
+      allow update, delete: if false;
+    }
+
+    match /comments/{commentId} {
+      allow read: if isAllowed();
+      allow create: if isAllowed() && isValidComment(request.resource.data) && isSelf(request.resource.data.authorId);
+      allow update, delete: if false;
+    }
+
+    match /replies/{replyId} {
+      allow read: if isAllowed();
+      allow create: if isAllowed() && isValidReply(request.resource.data) && isSelf(request.resource.data.authorId);
+      allow update, delete: if false;
+    }
+
+    // ---------- Activity log ----------
+    // One document per create/rename/archive action, written in the same
+    // batch as the content it describes -- so a post that exists always has
+    // a log entry, and a failed write leaves neither behind. Append-only
+    // like the content it tracks.
+    function actionValues() {
+      return [
+        'category.create', 'category.rename', 'category.archive', 'category.unarchive',
+        'thread.create', 'post.create', 'comment.create', 'reply.create'
+      ];
+    }
+
+    function targetTypeValues() {
+      return ['category', 'thread', 'post', 'comment', 'reply'];
+    }
+
+    // categoryId isn't part of the breadcrumb text on purpose: the Activity
+    // Log page filters by category, and matching an id is exact where
+    // matching a rendered breadcrumb string would break the moment someone
+    // renames a category.
+    function isValidActivity(d) {
+      return d.actorId is string &&
+        d.actorName is string &&
+        d.action in actionValues() &&
+        d.targetType in targetTypeValues() &&
+        d.targetId is string &&
+        d.breadcrumb is string &&
+        d.createdAt is number &&
+        isOptionalString(d, 'categoryId');
+    }
+
+    match /activityLog/{entryId} {
+      allow read: if isAllowed();
+      allow create: if isAllowed() && isValidActivity(request.resource.data) && isSelf(request.resource.data.actorId);
+      allow update, delete: if false;
+    }
+  }
+}
