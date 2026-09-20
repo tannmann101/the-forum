@@ -76,7 +76,34 @@ function NewThreadForm({ onCreate, disabled }) {
 // Sorted by most recent activity -- lastActivityAt is bumped in the same
 // batch as every new post, comment and reply, so a thread that someone just
 // replied deep inside still rises to the top.
+function ThreadRow({ thread, roster, onOpen, archived }) {
+  return (
+    <li>
+      <Card className={`thread-row ${archived ? 'is-archived' : ''}`}>
+        <button type="button" className="thread-open" onClick={() => onOpen(thread.id)}>
+          <h3>{thread.title}</h3>
+        </button>
+        <div className="thread-meta">
+          <Byline
+            name={thread.createdByName}
+            personId={thread.createdBy}
+            roster={roster}
+            at={thread.createdAt}
+            size="sm"
+          />
+          <span className="thread-counts">
+            <Count value={thread.postCount} label="post" />
+            <Count value={thread.commentCount} label="comment" />
+          </span>
+        </div>
+        <div className="thread-last">Last activity {relativeLabel(thread)}</div>
+      </Card>
+    </li>
+  );
+}
+
 export default function ThreadList({ category, threads, posts, comments, replies, roster, onOpenThread, onCreateThread }) {
+  const [showArchived, setShowArchived] = useState(false);
   const rows = useMemo(() => {
     const postCounts = new Map();
     for (const p of posts) postCounts.set(p.threadId, (postCounts.get(p.threadId) || 0) + 1);
@@ -92,6 +119,12 @@ export default function ThreadList({ category, threads, posts, comments, replies
       }))
       .sort((a, b) => (b.lastActivityAt || b.createdAt) - (a.lastActivityAt || a.createdAt));
   }, [threads, posts, comments, replies]);
+
+  // Archived threads drop out of the main list into their own collapsed
+  // section, mirroring how archived categories behave in the sidebar --
+  // put away rather than gone, and still readable.
+  const live = rows.filter((t) => !t.archived);
+  const archived = rows.filter((t) => t.archived);
 
   if (!category) {
     return (
@@ -109,43 +142,44 @@ export default function ThreadList({ category, threads, posts, comments, replies
           {category.archived ? <span className="archived-tag">Archived</span> : null}
         </h1>
         <p>
-          {rows.length === 0
+          {live.length === 0
             ? 'Nothing here yet.'
-            : `${rows.length} thread${rows.length === 1 ? '' : 's'}, most recent first.`}
+            : `${live.length} thread${live.length === 1 ? '' : 's'}, most recent first.`}
         </p>
       </div>
 
       <NewThreadForm onCreate={onCreateThread} />
 
-      {rows.length === 0 ? (
-        <EmptyState>No threads in this category yet -- start the first one.</EmptyState>
+      {live.length === 0 ? (
+        <EmptyState>
+          {archived.length > 0
+            ? 'Every thread in this category is archived.'
+            : 'No threads in this category yet -- start the first one.'}
+        </EmptyState>
       ) : (
         <ul className="thread-list">
-          {rows.map((thread) => (
-            <li key={thread.id}>
-              <Card className="thread-row">
-                <button type="button" className="thread-open" onClick={() => onOpenThread(thread.id)}>
-                  <h3>{thread.title}</h3>
-                </button>
-                <div className="thread-meta">
-                  <Byline
-                    name={thread.createdByName}
-                    personId={thread.createdBy}
-                    roster={roster}
-                    at={thread.createdAt}
-                    size="sm"
-                  />
-                  <span className="thread-counts">
-                    <Count value={thread.postCount} label="post" />
-                    <Count value={thread.commentCount} label="comment" />
-                  </span>
-                </div>
-                <div className="thread-last">Last activity {relativeLabel(thread)}</div>
-              </Card>
-            </li>
+          {live.map((thread) => (
+            <ThreadRow key={thread.id} thread={thread} roster={roster} onOpen={onOpenThread} />
           ))}
         </ul>
       )}
+
+      {archived.length > 0 ? (
+        <div className="archived-block">
+          <button type="button" className="archived-toggle" onClick={() => setShowArchived((v) => !v)}>
+            <span className={`caret ${showArchived ? 'is-open' : ''}`}>▸</span>
+            Archived
+            <span className="cat-count">{archived.length}</span>
+          </button>
+          {showArchived ? (
+            <ul className="thread-list">
+              {archived.map((thread) => (
+                <ThreadRow key={thread.id} thread={thread} roster={roster} onOpen={onOpenThread} archived />
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

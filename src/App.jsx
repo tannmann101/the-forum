@@ -14,25 +14,62 @@ const PAGES = [
   { id: 'activity', label: 'Activity Log' },
 ];
 
-// Two routes, and the URL hash is the router -- enough for two pages, and
-// it means an installed PWA reopens where it was and a link to the activity
-// log is a link someone can actually send. No router dependency.
-function usePage() {
-  const read = () => (window.location.hash.replace('#/', '') === 'activity' ? 'activity' : 'discussions');
-  const [page, setPage] = useState(read);
+// Where the app sends you when you go back past its own first screen.
+const HOME_SITE = 'https://thegardners.xyz';
+
+const parseHash = () => {
+  const raw = window.location.hash.replace(/^#\/?/, '');
+  if (raw === 'activity') return { page: 'activity', threadId: null };
+  if (raw.startsWith('t/')) return { page: 'discussions', threadId: raw.slice(2) };
+  return { page: 'discussions', threadId: null };
+};
+
+const hashFor = ({ page, threadId }) =>
+  page === 'activity' ? '#/activity' : threadId ? `#/t/${threadId}` : '#/';
+
+// Navigation lives in real browser history, not in React state. That's what
+// makes the platform's own back gesture work -- the iOS/Android edge swipe,
+// the Android hardware back button and the browser back button all just pop
+// history, so one mechanism covers all of them and there's no custom touch
+// handling to fight with the OS.
+//
+// On mount we replace the current entry with an "exit" marker and push the
+// app's first screen on top of it. That guarantees there is always exactly
+// one entry below the app, so backing out of the root screen lands on the
+// marker and we send you to the family site -- which is the behaviour asked
+// for, and happens whether or not you actually arrived from there.
+function useRoute() {
+  const [route, setRoute] = useState(parseHash);
 
   useEffect(() => {
-    const onHashChange = () => setPage(read());
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
+    if (!window.history.state?.forum) {
+      window.history.replaceState({ forum: 'exit' }, '');
+      window.history.pushState({ forum: 'app' }, '', hashFor(parseHash()));
+    }
+
+    const onPop = (event) => {
+      if (event.state?.forum === 'exit') {
+        window.location.replace(HOME_SITE);
+        return;
+      }
+      setRoute(parseHash());
+    };
+
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const navigate = (next) => {
-    window.location.hash = next === 'activity' ? '#/activity' : '#/';
-    setPage(next);
+  // push adds a level you can come back from (opening a thread, opening the
+  // activity log); replace swaps the current one (switching category), so
+  // back doesn't have to walk through every sideways move.
+  const navigate = (next, { replace = false } = {}) => {
+    const resolved = { page: 'discussions', threadId: null, ...next };
+    const method = replace ? 'replaceState' : 'pushState';
+    window.history[method]({ forum: 'app' }, '', hashFor(resolved));
+    setRoute(resolved);
   };
 
-  return [page, navigate];
+  return [route, navigate];
 }
 
 function Shell({ user }) {
@@ -52,11 +89,19 @@ function Shell({ user }) {
     addPost,
     addComment,
     addReply,
+    editThread,
+    setThreadArchived,
+    editPost,
+    setPostArchived,
+    editComment,
+    deleteComment,
+    editReply,
+    deleteReply,
   } = forum;
 
-  const [page, navigate] = usePage();
+  const [route, navigate] = useRoute();
+  const { page, threadId: openThreadId } = route;
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
-  const [openThreadId, setOpenThreadId] = useState(null);
 
   const sortedCategories = useMemo(
     () => [...categories].sort((a, b) => (a.order || 0) - (b.order || 0) || a.name.localeCompare(b.name)),
@@ -93,9 +138,12 @@ function Shell({ user }) {
   const openThread = openThreadId ? threads.find((t) => t.id === openThreadId) : null;
   const openThreadCategory = openThread ? sortedCategories.find((c) => c.id === openThread.categoryId) : null;
 
+  // Switching category replaces the history entry rather than adding one --
+  // back should leave the app, not walk you through every category you
+  // clicked on the way here.
   const selectCategory = (id) => {
     setSelectedCategoryId(id);
-    setOpenThreadId(null);
+    navigate({ page: 'discussions', threadId: null }, { replace: true });
   };
 
   return (
@@ -108,7 +156,7 @@ function Shell({ user }) {
               key={p.id}
               type="button"
               className={`nav-link ${page === p.id ? 'is-active' : ''}`}
-              onClick={() => navigate(p.id)}
+              onClick={() => navigate({ page: p.id })}
             >
               {p.label}
             </button>
@@ -139,6 +187,7 @@ function Shell({ user }) {
           <Sidebar
             categories={sortedCategories}
             threadCounts={threadCounts}
+            me={user.uid}
             selectedId={activeCategoryId}
             onSelect={selectCategory}
             onAdd={addCategory}
@@ -156,29 +205,37 @@ function Shell({ user }) {
                 comments={comments}
                 replies={replies}
                 roster={roster}
-                onBack={() => setOpenThreadId(null)}
-                onAddPost={(body) =>
-                  addPost({ threadId: openThread.id, categoryId: openThread.categoryId, body })
-                }
-                onAddComment={(post, body) =>
-                  addComment({
-                    postId: post.id,
-                    threadId: openThread.id,
-                    categoryId: openThread.categoryId,
-                    body,
-                    onAuthorName: post.authorName,
-                  })
-                }
-                onAddReply={(comment, body) =>
-                  addReply({
-                    commentId: comment.id,
-                    postId: comment.postId,
-                    threadId: openThread.id,
-                    categoryId: openThread.categoryId,
-                    body,
-                    onAuthorName: comment.authorName,
-                  })
-                }
+                me={user.uid}
+                onBack={() => window.history.back()}
+                handlers={{
+                  onAddPost: (body) =>
+                    addPost({ threadId: openThread.id, categoryId: openThread.categoryId, body }),
+                  onAddComment: (post, body) =>
+                    addComment({
+                      postId: post.id,
+                      threadId: openThread.id,
+                      categoryId: openThread.categoryId,
+                      body,
+                      onAuthorName: post.authorName,
+                    }),
+                  onAddReply: (comment, body) =>
+                    addReply({
+                      commentId: comment.id,
+                      postId: comment.postId,
+                      threadId: openThread.id,
+                      categoryId: openThread.categoryId,
+                      body,
+                      onAuthorName: comment.authorName,
+                    }),
+                  onEditThread: editThread,
+                  onSetThreadArchived: setThreadArchived,
+                  onEditPost: editPost,
+                  onSetPostArchived: setPostArchived,
+                  onEditComment: editComment,
+                  onDeleteComment: deleteComment,
+                  onEditReply: editReply,
+                  onDeleteReply: deleteReply,
+                }}
               />
             ) : (
               <ThreadList
@@ -188,7 +245,7 @@ function Shell({ user }) {
                 comments={comments}
                 replies={replies}
                 roster={roster}
-                onOpenThread={setOpenThreadId}
+                onOpenThread={(id) => navigate({ page: 'discussions', threadId: id })}
                 onCreateThread={({ title, body }) =>
                   addThread({ categoryId: activeCategoryId, title, body })
                 }

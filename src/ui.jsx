@@ -33,7 +33,7 @@ export function Avatar({ name, personId, roster = [], size = 'md' }) {
 
 // "Every item shows author name + relative timestamp." One component, used
 // by posts, comments and replies alike, so they can't drift apart.
-export function Byline({ name, personId, roster, at, size = 'md', trailing }) {
+export function Byline({ name, personId, roster, at, editedAt, size = 'md', trailing }) {
   return (
     <div className={`byline byline-${size}`}>
       <Avatar name={name} personId={personId} roster={roster} size={size} />
@@ -41,6 +41,14 @@ export function Byline({ name, personId, roster, at, size = 'md', trailing }) {
       <time className="byline-time" dateTime={new Date(at).toISOString()} title={absoluteTime(at)}>
         {relativeTime(at)}
       </time>
+      {/* Edits are marked rather than silent -- the activity log records
+          them too, but someone reading the thread shouldn't have to go
+          looking to find out the text changed after it was written. */}
+      {editedAt ? (
+        <span className="edited-tag" title={`Edited ${absoluteTime(editedAt)}`}>
+          edited
+        </span>
+      ) : null}
       {trailing}
     </div>
   );
@@ -64,12 +72,14 @@ export function Composer({
   submitLabel,
   placeholder,
   onSubmit,
+  onCancel,
+  initialBody = '',
   autoFocus = false,
   alwaysOpen = false,
   rows = 3,
 }) {
   const [open, setOpen] = useState(alwaysOpen || autoFocus);
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(initialBody);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const textareaRef = useRef(null);
@@ -98,7 +108,8 @@ export function Composer({
     setError('');
     try {
       await onSubmit(text);
-      setBody('');
+      // An editor keeps whatever it saved; a new-item composer empties.
+      if (!initialBody) setBody('');
       if (!alwaysOpen) setOpen(false);
     } catch (err) {
       console.error('Failed to post', err);
@@ -128,19 +139,20 @@ export function Composer({
         <button type="submit" className="btn-primary" disabled={busy || !body.trim()}>
           {busy ? 'Posting…' : submitLabel}
         </button>
-        {alwaysOpen ? null : (
+        {onCancel || !alwaysOpen ? (
           <button
             type="button"
             className="link-btn"
             onClick={() => {
-              setBody('');
+              setBody(initialBody);
               setError('');
-              setOpen(false);
+              setOpen(alwaysOpen);
+              onCancel?.();
             }}
           >
             Cancel
           </button>
-        )}
+        ) : null}
         <span className="composer-hint">⌘/Ctrl + Enter</span>
       </div>
     </form>
@@ -160,5 +172,54 @@ export function Count({ value, label }) {
       <strong>{value}</strong> {label}
       {value === 1 ? '' : 's'}
     </span>
+  );
+}
+
+// The small "Edit / Archive / Delete" row under something you wrote.
+// Rendered only for the owner, but that is a convenience, not the security
+// boundary -- firestore.rules checks ownership against the stored document,
+// so hiding these buttons is about keeping the UI honest, not about
+// stopping anyone.
+export function ItemActions({ actions }) {
+  const live = actions.filter(Boolean);
+  if (live.length === 0) return null;
+  return (
+    <div className="item-actions">
+      {live.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          className={`link-btn ${action.danger ? 'is-danger' : ''}`}
+          onClick={action.onClick}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// A comment that was deleted while replies still hung off it. The document
+// stays so its replies keep their context; only the text is gone.
+export function Tombstone({ children }) {
+  return <p className="tombstone">{children || 'Comment deleted.'}</p>;
+}
+
+// An archived post or thread. Archiving is how anything with other
+// people's content under it goes away -- a delete would take their
+// comments with it -- so the shell stays and the body is hidden.
+export function ArchivedNote({ what, by, at, onUnarchive }) {
+  return (
+    <div className="archived-note">
+      <span>
+        {what} archived{by ? ` by ${by}` : ''}
+        {at ? ` · ${relativeTime(at)}` : ''}
+      </span>
+      {onUnarchive ? (
+        <button type="button" className="link-btn" onClick={onUnarchive}>
+          Unarchive
+        </button>
+      ) : null}
+    </div>
   );
 }
