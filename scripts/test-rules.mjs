@@ -241,6 +241,12 @@ await expect('isInitial cannot be flipped', updateDoc(doc(tannerDb, 'posts/ownPo
 await expect('author can edit their comment', updateDoc(doc(rochelleDb, 'comments/herComment'), { body: 'Edited', editedAt: Date.now() }), true);
 await expect('non-author cannot edit a comment', updateDoc(doc(tannerDb, 'comments/herComment'), { body: 'Hijacked', editedAt: Date.now() }), false);
 await expect('author can tombstone their comment (the has-replies shape)', updateDoc(doc(rochelleDb, 'comments/herComment'), { body: '[deleted]', deleted: true, deletedAt: Date.now() }), true);
+// A tombstone keeps the replies' context, not the content, so it clears
+// the attachments array as the Storage objects are deleted.
+await expect('tombstoning can clear the attachments array',
+  updateDoc(doc(rochelleDb, 'comments/herComment'), { body: '[deleted]', deleted: true, deletedAt: Date.now(), attachments: [] }), true);
+await expect('a non-author still cannot clear attachments',
+  updateDoc(doc(tannerDb, 'comments/herComment'), { attachments: [] }), false);
 await expect('non-author cannot delete a comment', deleteDoc(doc(tannerDb, 'comments/herComment')), false);
 await expect('author can delete their comment outright', deleteDoc(doc(rochelleDb, 'comments/herComment')), true);
 

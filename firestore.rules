@@ -203,7 +203,7 @@ service cloud.firestore {
         ownsExisting('authorId') &&
         isValidComment(request.resource.data) &&
         identityIntact('authorId', 'authorName', 'createdAt') &&
-        changed(['body', 'editedAt', 'deleted', 'deletedAt']);
+        changed(['body', 'editedAt', 'deleted', 'deletedAt', 'attachments']);
       allow delete: if isAllowed() && ownsExisting('authorId');
     }
 

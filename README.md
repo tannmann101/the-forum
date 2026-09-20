@@ -128,6 +128,14 @@ than tidy-minded: `useForum` holds whole collections in memory through
 downloading every photo ever posted, on every load. Metadata is a few
 hundred bytes per image, so the collections stay small.
 
+Deleting a comment or reply deletes its images from the bucket too, and
+tombstoning one does the same — a tombstone preserves its replies' context,
+not the content. That cleanup runs *after* the Firestore write commits,
+never inside the batch: Storage takes no part in a Firestore transaction,
+so the reverse order would let a rejected commit leave content whose images
+had already been destroyed. The worst case this way is a leftover file.
+Archiving deliberately keeps everything, since archived items come back.
+
 Uploads start the moment a file is picked, not on submit, so posting is
 instant once it's written. The cost of that is orphans — a file uploaded and
 then abandoned has no document pointing at it — so removing an image, or

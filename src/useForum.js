@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { collection, doc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { ref, deleteObject } from 'firebase/storage';
+import { db, storage } from './firebase.js';
 import { IMAGE_ONLY_BODY, TOMBSTONE_BODY } from './theme.js';
-import { db } from './firebase.js';
 
 const COLLECTIONS = ['categories', 'threads', 'posts', 'comments', 'replies', 'activityLog'];
 
@@ -12,6 +13,30 @@ const EMPTY = { categories: [], threads: [], posts: [], comments: [], replies: [
 // renamed. The Activity Log's category filter matches on categoryId instead,
 // which a rename can't break.
 const CRUMB = ' › ';
+
+
+// Removes the Storage objects behind a deleted item's attachments.
+//
+// Deliberately called AFTER the Firestore write has committed, never
+// before or inside the batch. Storage has no part in a Firestore
+// transaction, so if the order were reversed a rejected commit would leave
+// content whose images had already been destroyed -- visibly broken. This
+// way the worst case is a leftover file, which is exactly the state this
+// is fixing rather than a new fault.
+//
+// Best effort for the same reason: one failed delete shouldn't fail the
+// delete the person actually asked for.
+async function discardAttachments(attachments) {
+  const paths = (attachments || []).map((a) => a?.path).filter(Boolean);
+  if (paths.length === 0) return;
+  await Promise.allSettled(
+    paths.map((path) =>
+      deleteObject(ref(storage, path)).catch((err) => {
+        console.warn('Could not delete attachment', path, err);
+      }),
+    ),
+  );
+}
 
 export function displayName(user) {
   if (!user) return 'Someone';
@@ -443,12 +468,15 @@ export function useForum(user) {
               updates: [
                 {
                   path: ['comments', comment.id],
-                  fields: { body: TOMBSTONE_BODY, deleted: true, deletedAt: Date.now() },
+                  // A tombstone keeps the replies' context, not the
+                  // content -- so the images go with the text.
+                  fields: { body: TOMBSTONE_BODY, deleted: true, deletedAt: Date.now(), attachments: [] },
                 },
               ],
             }
           : { deletePath: ['comments', comment.id] }),
       });
+      await discardAttachments(comment.attachments);
     },
     [categoryName, commit, threadTitle],
   );
@@ -479,6 +507,7 @@ export function useForum(user) {
         categoryId: reply.categoryId,
         deletePath: ['replies', reply.id],
       });
+      await discardAttachments(reply.attachments);
     },
     [categoryName, commit, threadTitle],
   );
